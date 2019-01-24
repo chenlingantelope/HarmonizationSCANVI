@@ -23,9 +23,11 @@ from umap import UMAP
 
 from scvi.models.vae import VAE
 from scvi.models.scanvi import SCANVI
-from scvi.inference import UnsupervisedTrainer, AlternateSemiSupervisedTrainer
+from scvi.inference import UnsupervisedTrainer
+from scvi.inference import AlternateSemiSupervisedTrainer,SemiSupervisedTrainer
 import torch
 import os
+from copy import deepcopy
 
 plotname = 'NoOverlap'
 
@@ -55,7 +57,7 @@ def entropy_from_indices(indices):
     return entropy(np.array(np.unique(indices, return_counts=True)[1].astype(np.int32)))
 
 
-def entropy_batch_mixing_subsampled(latent, batches, labels, removed_type, n_neighbors=50, n_pools=50, n_samples_per_pool=100):
+def entropy_batch_mixing_subsampled(latent, batches, labels, removed_type, n_neighbors=20, n_pools=50, n_samples_per_pool=100):
     X = latent[labels == removed_type,:]
     nbrs = NearestNeighbors(n_neighbors=n_neighbors + 1).fit(latent)
     indices = nbrs.kneighbors(X, return_distance=False)[:, 1:]
@@ -192,7 +194,6 @@ for rmCellTypes in dataset2.cell_types[:6]:
     # plotUMAP(latent, plotname, 'Seurat', rmCellTypes)
 
     pbmc, pbmc2, gene_dataset = SubsetGenes(pbmc, pbmc2, gene_dataset, plotname + rmCellTypes.replace(' ', ''))
-    # plotUMAP(latent, plotname, 'vae', rmCellTypes)
     latent1, _, _, _ = trainVAE(pbmc, rmCellTypes, rep='1')
     latent2, _, _, _ = trainVAE(pbmc2, rmCellTypes, rep='2')
     latent, batch_indices, labels, trainer = trainVAE(gene_dataset, rmCellTypes, rep='')
@@ -200,18 +201,28 @@ for rmCellTypes in dataset2.cell_types[:6]:
     f.write('vae' + '\t' + rmCellTypes + ("\t%.4f" * 8 + "\t%s" * 8 + "\n") % tuple(list(acc) + list(cell_type)))
     be, cell_type2 = BEbyType(keys, latent, labels, batch_indices)
     g.write('vae' + '\t' + rmCellTypes + ("\t%.4f" * 8 + "\t%s" * 8 + "\n") % tuple(be + list(cell_type2)))
-    scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, (gene_dataset.n_labels), n_layers=2)
+    # plotUMAP(latent, plotname, 'vae', rmCellTypes)
+
+    labelledset = deepcopy(gene_dataset)
+    labelledset.update_cells(gene_dataset.batch_indices.ravel() == 0)
+    scanvi = SCANVI(labelledset.nb_genes, 2, (labelledset.n_labels + 1),
+                    n_hidden=128, n_latent=10, n_layers=2, dispersion='gene')
     scanvi.load_state_dict(trainer.model.state_dict(), strict=False)
-    trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset, classification_ratio=50,
-                                                    n_epochs_classifier=10, lr_classification=5 * 1e-3)
-    trainer_scanvi.labelled_set = trainer_scanvi.create_posterior(indices=gene_dataset.batch_indices.ravel() == 0)
-    trainer_scanvi.unlabelled_set = trainer_scanvi.create_posterior(indices=gene_dataset.batch_indices.ravel() == 1)
-    if os.path.isfile('../NoOverlap/scanvi.%s.pkl' % rmCellTypes):
-        trainer_scanvi.model.load_state_dict(torch.load('../NoOverlap/scanvi.%s.pkl' % rmCellTypes))
-        trainer_scanvi.model.eval()
-    else:
-        trainer_scanvi.train(n_epochs=10)
-        torch.save(trainer_scanvi.model.state_dict(), '../NoOverlap/scanvi.%s.pkl' % rmCellTypes)
+    trainer_scanvi = SemiSupervisedTrainer(scanvi, labelledset, n_epochs_classifier=1, lr_classification=5 * 1e-3)
+    trainer_scanvi.train(n_epochs=5)
+
+    # scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, (gene_dataset.n_labels), n_layers=2)
+    # scanvi.load_state_dict(trainer.model.state_dict(), strict=False)
+    # trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset, classification_ratio=50,
+    #                                                 n_epochs_classifier=100, lr_classification=5 * 1e-3)
+    # trainer_scanvi.labelled_set = trainer_scanvi.create_posterior(indices=gene_dataset.batch_indices.ravel() == 0)
+    # trainer_scanvi.unlabelled_set = trainer_scanvi.create_posterior(indices=gene_dataset.batch_indices.ravel() == 1)
+    # if os.path.isfile('../NoOverlap/scanvi.%s.pkl' % rmCellTypes):
+    #     trainer_scanvi.model.load_state_dict(torch.load('../NoOverlap/scanvi.%s.pkl' % rmCellTypes))
+    #     trainer_scanvi.model.eval()
+    # else:
+    #     trainer_scanvi.train(n_epochs=10)
+    #     torch.save(trainer_scanvi.model.state_dict(), '../NoOverlap/scanvi.%s.pkl' % rmCellTypes)
     scanvi_full = trainer_scanvi.create_posterior(trainer_scanvi.model, gene_dataset, indices=np.arange(len(gene_dataset)))
     latent, _, _ = scanvi_full.sequential().get_latent()
     acc, cell_type = KNNpurity(latent1, latent2,latent,batch_indices.ravel(),labels,keys)
