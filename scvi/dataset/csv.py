@@ -1,11 +1,11 @@
 from .dataset import GeneExpressionDataset
 import pandas as pd
 import numpy as np
+import os
 
 
 class CsvDataset(GeneExpressionDataset):
     r""" Loads a `.csv` file.
-
     Args:
         :filename: Name of the `.csv` file.
         :save_path: Save path of the dataset. Default: ``'data/'``.
@@ -16,32 +16,40 @@ class CsvDataset(GeneExpressionDataset):
             is path-like, then detect compression from the following extensions: ‘.gz’, ‘.bz2’, ‘.zip’, or ‘.xz’
             (otherwise no decompression). If using ‘zip’, the ZIP file must contain only one data file to be read in.
             Default: ``None``.
-
+        :batch_ids_file: Name of the `.csv` file with batch indices.
+            File contains two columns. The first holds cell names and second
+            holds batch indices - type int. The first row of the file is header.
     Examples:
         >>> # Loading a remote dataset
         >>> remote_url = "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE100866&format=file&file=" \
         ... "GSE100866%5FCBMC%5F8K%5F13AB%5F10X%2DRNA%5Fumi%2Ecsv%2Egz")
         >>> remote_csv_dataset = CsvDataset("GSE100866_CBMC_8K_13AB_10X-RNA_umi.csv.gz", save_path='data/',
-        ... compression='gzip', url=remove_url)
+        ... compression='gzip', url=remote_url)
         >>> # Loading a local dataset
         >>> local_csv_dataset = CsvDataset("GSE100866_CBMC_8K_13AB_10X-RNA_umi.csv.gz",
         ... save_path='data/', compression='gzip')
-
     """
+
     def __init__(self, filename, save_path='data/', url=None, new_n_genes=600, subset_genes=None,
-                 compression=None, sep=',', gene_by_cell=True):
+                 compression=None, sep=',', gene_by_cell=True, labels_file=None,
+                 batch_ids_file=None):
         self.download_name = filename  # The given csv file is
         self.save_path = save_path
         self.url = url
         self.compression = compression
         self.sep = sep
         self.gene_by_cell = gene_by_cell  # Whether the original dataset is genes by cells
-
-        data, gene_names = self.download_and_preprocess()
-
-        super(CsvDataset, self).__init__(
+        self.labels_file = labels_file
+        self.batch_ids_file = batch_ids_file
+        if self.url is not None:
+            data, gene_names, labels, cell_types, batch_ids = self.download_and_preprocess()
+        else:
+            data, gene_names, labels, cell_types, batch_ids = self.preprocess()
+        super().__init__(
             *GeneExpressionDataset.get_attributes_from_matrix(
-                data), gene_names=gene_names)
+                data, labels=labels,
+                batch_indices=batch_ids if batch_ids is not None else 0),
+            gene_names=gene_names, cell_types=cell_types)
 
         self.subsample_genes(new_n_genes, subset_genes)
 
@@ -49,17 +57,28 @@ class CsvDataset(GeneExpressionDataset):
         print("Preprocessing dataset")
 
         if self.gene_by_cell:
-            data = pd.read_csv(self.save_path + self.download_name,
+            data = pd.read_csv(os.path.join(self.save_path, self.download_name),
                                sep=self.sep, index_col=0, compression=self.compression).T
         else:
-            data = pd.read_csv(self.save_path + self.download_name,
+            data = pd.read_csv(os.path.join(self.save_path, self.download_name),
                                sep=self.sep, index_col=0, compression=self.compression)
 
         gene_names = np.array(data.columns, dtype=str)
+        labels, cell_types, batch_ids = None, None, None
+        if self.labels_file is not None:
+            labels = pd.read_csv(os.path.join(self.save_path, self.labels_file), header=0, index_col=0)
+            labels = labels.values
+            cell_types = np.unique(labels)
+
+        if self.batch_ids_file is not None:
+            batch_ids = pd.read_csv(
+                os.path.join(
+                    self.save_path, self.batch_ids_file), header=0, index_col=0)
+            batch_ids = batch_ids.values
 
         data = data.values
         print("Finished preprocessing dataset")
-        return data, gene_names
+        return data, gene_names, labels, cell_types, batch_ids
 
 
 class BreastCancerDataset(CsvDataset):

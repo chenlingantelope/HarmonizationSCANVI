@@ -24,13 +24,12 @@ model_types = np.unique(model_types)
 res = np.asarray(res)
 
 sorted_res=[]
-model_order = ['vae', 'scanvi1','scanvi2','readSeurat', 'MNN','Combat','PCA']
-model_names = ['scVI','SCANVI1','SCANVI2','CCA','MNN','Combat','PCA']
-colors = ('r','g','g--','b','y','m','c')
+methods = ['vae', 'scanvi1', 'scanvi2', 'vae_nb', 'scanvi1_nb', 'scanvi2_nb', 'readSeurat', 'MNN', 'Combat', 'PCA']
+model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB', 'CCA', 'MNN', 'Combat', 'PCA']
+colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'm', 'c')
 
-# model_order = ['vae',  'readSeurat', 'MNN']
-# model_names = ['scVI','CCA','MNN']
-for x in model_order:
+
+for x in methods:
     sorted_res.append(res[model_types==x,:])
 
 sorted_res = np.asarray(sorted_res)

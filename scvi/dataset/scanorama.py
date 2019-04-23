@@ -19,19 +19,23 @@ class DatasetSCANORAMA(GeneExpressionDataset):
             X = sparse.load_npz(self.save_path + '.h5.npz')
             with open(self.save_path + '.h5.genes.txt') as f:
                 genes = np.array(f.read().rstrip().split())
+            genes = np.array([gene.upper() for gene in genes])
+            return X, genes
         elif os.path.isfile(self.save_path + '.npz'):
             data = np.load(self.save_path + '.npz')
             X = data['X']
             genes = data['genes']
             data.close()
+            genes = np.array([gene.upper() for gene in genes])
+            return X, genes
         elif os.path.isfile(self.save_path + '/tab.npz'):
             X = sparse.load_npz(self.save_path + '/tab.npz')
             with open(self.save_path + '/tab.genes.txt') as f:
                 genes = np.array(f.read().rstrip().split())
+            genes = np.array([gene.upper() for gene in genes])
+            return X, genes
         else:
             sys.stderr.write('Could not find: {}\n'.format(self.save_path))
-            exit(1)
-        genes = np.array([gene.upper() for gene in genes])
-        return X, genes
+            return 0, 0
 
 

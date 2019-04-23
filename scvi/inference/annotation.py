@@ -234,8 +234,8 @@ def compute_predictions(model, data_loader, classifier=None):
             y_pred = model(sample_batch).argmax(dim=-1)
         all_y_pred += [y_pred]
 
-    all_y_pred = np.array(torch.cat(all_y_pred))
-    all_y = np.array(torch.cat(all_y))
+    all_y_pred = np.array(torch.cat(all_y_pred).cpu())
+    all_y = np.array(torch.cat(all_y).cpu())
     return all_y, all_y_pred
 
 

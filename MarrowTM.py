@@ -1,21 +1,21 @@
 use_cuda = True
 from scvi.dataset.dataset import GeneExpressionDataset
 from scvi.harmonization.utils_chenling import CompareModels
-import sys
 import numpy as np
+import sys
+sys.path.append("/data/yosef2/users/chenling/HarmonizationSCANVI")
 
 models = str(sys.argv[1])
-plotname = 'Tech1'
+plotname = 'MarrowTM'
 
 from scvi.dataset.muris_tabula import TabulaMuris
-dataset1 = TabulaMuris('facs')
-dataset2 = TabulaMuris('droplet')
+dataset1 = TabulaMuris('facs', save_path='/data/yosef2/scratch/chenling/scanvi_data/')
+dataset2 = TabulaMuris('droplet', save_path='/data/yosef2/scratch/chenling/scanvi_data/')
 dataset1.subsample_genes(dataset1.nb_genes)
 dataset2.subsample_genes(dataset2.nb_genes)
 
 gene_dataset = GeneExpressionDataset.concat_datasets(dataset1, dataset2)
 
-import numpy as np
 f = open("../%s/celltypeprop.txt"%plotname, "w+")
 f.write("%s\t"*len(gene_dataset.cell_types)%tuple(gene_dataset.cell_types)+"\n")
 freq = [np.mean(gene_dataset.labels.ravel()==i) for i in np.unique(gene_dataset.labels.ravel())]
@@ -27,6 +27,7 @@ f.write("%f\t"*len(gene_dataset.cell_types)%tuple(freq2)+"\n")
 f.close()
 
 CompareModels(gene_dataset, dataset1, dataset2, plotname, models)
+
 # 438.05354394990854
 #
 #

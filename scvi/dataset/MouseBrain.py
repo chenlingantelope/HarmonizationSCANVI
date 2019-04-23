@@ -105,7 +105,7 @@ class ZeiselCortexOnly(GeneExpressionDataset):
 
 
 class DentateGyrus10X(GeneExpressionDataset):
-    def __init__(self, save_path='/data/mouse_brain/'):
+    def __init__(self, save_path='/data/yosef2/scratch/chenling/scanvi_data/'):
         self.save_path = save_path
         count, labels, cell_type, gene_names= self.preprocess()
         labels = labels.astype('int')
@@ -114,15 +114,15 @@ class DentateGyrus10X(GeneExpressionDataset):
                 count, labels=labels),
             gene_names=np.char.upper(gene_names), cell_types=cell_type)
     def preprocess(self):
-        cells = loompy.connect('/data/mouse_brain/' + 'dentate_gyrus_10X_V1.loom')
+        cells = loompy.connect(self.save_path + 'dentate_gyrus_10X_V1.loom')
         select = cells[:, :].sum(axis=0) > 0  # Take out cells that doesn't express any gene
         count = cells[:, select].T  # change matrix to cells by genes
         cell_types, labels = np.unique(cells.ca['Cluster'], return_inverse=True)
-        return (count, labels, cell_types, cells.ra['Gene'])
+        return (count, labels, cell_types, cells.ra['Gene'].astype(str))
 
 
 class DentateGyrusC1(GeneExpressionDataset):
-    def __init__(self, save_path='/data/mouse_brain/'):
+    def __init__(self, save_path='/data/yosef2/scratch/chenling/scanvi_data/'):
         self.save_path = save_path
         count, labels, cell_type, gene_names= self.preprocess()
         count = np.floor(count)
@@ -132,9 +132,9 @@ class DentateGyrusC1(GeneExpressionDataset):
                 count, labels=labels),
             gene_names=np.char.upper(gene_names), cell_types=cell_type)
     def preprocess(self):
-        cells = loompy.connect('/data/mouse_brain/' + 'dentate_gyrus_C1.loom')
+        cells = loompy.connect(self.save_path + 'dentate_gyrus_C1.loom')
         select = cells[:, :].sum(axis=0) > 0  # Take out cells that doesn't express any gene
         count = cells[:, select].T  # change matrix to cells by genes
         cell_types, labels = np.unique(cells.ca['Cluster'], return_inverse=True)
-        return (count, labels, cell_types, cells.ra['Gene'])
+        return (count, labels, cell_types, cells.ra['Gene'].astype(str))
 

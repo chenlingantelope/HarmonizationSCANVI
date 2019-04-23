@@ -7,16 +7,16 @@ from scvi.dataset.dataset import GeneExpressionDataset
 from scvi.harmonization.utils_chenling import CompareModels
 import sys
 models = str(sys.argv[1])
-plotname = 'Easy1'
+plotname = 'PBMC8KCITE'
 
 dataset1 = PbmcDataset(filter_out_de_genes=False)
 dataset1.update_cells(dataset1.batch_indices.ravel()==0)
 dataset1.subsample_genes(dataset1.nb_genes)
 
-
-count, geneid, cellid = get_matrix_from_dir('cite')
+save_path='/data/yosef2/scratch/chenling/scanvi_data/'
+count, geneid, cellid = get_matrix_from_dir(save_path + 'cite')
 count = count.T.tocsr()
-seurat = np.genfromtxt('../cite/cite.seurat.labels', dtype='str', delimiter=',')
+seurat = np.genfromtxt(save_path + 'cite/cite.seurat.labels', dtype='str', delimiter=',')
 cellid = np.asarray([x.split('-')[0] for x in cellid])
 labels_map = [0, 0, 1, 2, 3, 4, 5, 6]
 labels = seurat[1:, 4]

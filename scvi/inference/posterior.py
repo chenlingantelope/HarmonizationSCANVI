@@ -149,7 +149,7 @@ class Posterior:
                 latent += [self.model.sample_from_posterior_z(sample_batch)]
             batch_indices += [batch_index]
             labels += [label]
-        return np.array(torch.cat(latent)), np.array(torch.cat(batch_indices)), np.array(torch.cat(labels)).ravel()
+        return np.array(torch.cat(latent).cpu()), np.array(torch.cat(batch_indices).cpu()), np.array(torch.cat(labels).cpu()).ravel()
 
 
     def impute_from_z(self, fixed_batch_indices,fixed_l, sample=False):

@@ -9,16 +9,17 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 from copy import deepcopy
 import numpy as np
-import matplotlib.pyplot as plt
+import sys
+sys.path.append("/data/yosef2/users/chenling/HarmonizationSCANVI")
 
 def BE_curve(gene_dataset:GeneExpressionDataset, dataset1, dataset2, plotname: str,recompute=False):
     import matplotlib.pyplot as plt
     import numpy as np
     import os
     fname = '../%s/%s.BE.txt'%(plotname,plotname)
-    methods = ['vae', 'scanvi1', 'scanvi2', 'readSeurat', 'MNN', 'Combat', 'PCA']
-    model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'CCA', 'MNN', 'Combat', 'PCA']
-    colors = ('r', 'g', 'g--', 'b', 'y', 'm', 'c')
+    methods = ['vae', 'scanvi1', 'scanvi2','vae_nb', 'scanvi1_nb', 'scanvi2_nb', 'readSeurat', 'MNN', 'Combat', 'PCA']
+    model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB', 'CCA', 'MNN', 'Combat', 'PCA']
+    colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'm', 'c')
 
     if (not os.path.isfile(fname)) or recompute==True:
         dataset1, dataset2, gene_dataset = SubsetGenes(dataset1, dataset2, gene_dataset, plotname)
@@ -38,11 +39,11 @@ def BE_curve(gene_dataset:GeneExpressionDataset, dataset1, dataset2, plotname: s
         plt.savefig("../%s/%s.BE.pdf" % (plotname,plotname))
         f.close()
 
-for plotname in ['Easy1','Tech1','Tech3','Tech4']:
+for plotname in ['PBMC8KCITE','MarrowMT','Pancreas','DentateGyrus']:
     fname = '../%s/%s.BE.txt' % (plotname, plotname)
-    methods = ['vae', 'scanvi1', 'scanvi2', 'readSeurat', 'MNN', 'Combat', 'PCA']
-    model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'CCA', 'MNN', 'Combat', 'PCA']
-    colors = ('r', 'g', 'g--', 'b', 'y', 'm', 'c')
+    methods = ['vae', 'scanvi1', 'scanvi2','vae_nb', 'scanvi1_nb', 'scanvi2_nb', 'readSeurat', 'MNN', 'Combat', 'PCA']
+    model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB', 'CCA', 'MNN', 'Combat', 'PCA']
+    colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'm', 'c')
     import pandas as pd
     stats = pd.read_table(fname, delim_whitespace=True,header=None)
     stats=np.asarray(stats)
@@ -108,34 +109,22 @@ dataset2.subsample_genes(dataset2.nb_genes)
 gene_dataset = GeneExpressionDataset.concat_datasets(dataset1, dataset2)
 BE_curve(gene_dataset, dataset1, dataset2,plotname,recompute=False)
 
-from scvi.dataset.scanorama import DatasetSCANORAMA
-plotname='Tech4'
-dirs = ['data/pancreas/pancreas_inDrop', 'data/pancreas/pancreas_multi_celseq2_expression_matrix', 'data/pancreas/pancreas_multi_celseq_expression_matrix', 'data/pancreas/pancreas_multi_fluidigmc1_expression_matrix', 'data/pancreas/pancreas_multi_smartseq2_expression_matrix']
-datasets = [DatasetSCANORAMA(d) for d in dirs]
-labels = (open('/data/scanorama/data/cell_labels/pancreas_cluster.txt').read().rstrip().split())
-all_dataset = GeneExpressionDataset.concat_datasets(*datasets)
-batch_id = all_dataset.batch_indices.ravel()
-
-all_dataset = GeneExpressionDataset.concat_datasets(datasets[0],datasets[1])
-all_dataset.cell_types,all_dataset.labels = np.unique(np.asarray(labels)[(batch_id==0)+(batch_id==1)],return_inverse=True)
-all_dataset.labels = all_dataset.labels.reshape(len(all_dataset.labels),1)
-all_dataset.n_labels = len(np.unique(all_dataset.labels))
-all_dataset.subsample_genes(all_dataset.nb_genes)
-dataset1 = deepcopy(all_dataset)
-dataset1.update_cells(dataset1.batch_indices.ravel()==0)
-dataset2 = deepcopy(all_dataset)
-dataset2.update_cells(dataset2.batch_indices.ravel()==1)
+import pickle as pkl
+f = open('../%s/gene_dataset.pkl'%plotname, 'rb')
+all_dataset, dataset1, dataset2 = pkl.load(f)
+f.close()
 BE_curve(all_dataset, dataset1, dataset2,plotname,recompute=False)
 
+plotname = 'DentateGyrus'
 from scvi.dataset.dataset import GeneExpressionDataset
-from scvi.dataset.MouseBrain import DentateGyrus10X,DentateGyrusC1
-plotname = 'Tech3'
-dataset1 = DentateGyrus10X()
+from scvi.dataset.MouseBrain import DentateGyrus10X, DentateGyrusC1
+
+dataset1= DentateGyrus10X()
 dataset1.subsample_genes(dataset1.nb_genes)
 dataset2 = DentateGyrusC1()
 dataset2.subsample_genes(dataset2.nb_genes)
 gene_dataset = GeneExpressionDataset.concat_datasets(dataset1,dataset2)
-BE_curve(gene_dataset,dataset1,dataset2, plotname,recompute=False)
+BE_curve(all_dataset, dataset1, dataset2,plotname,recompute=False)
 
 # import pandas as pd
 # from scvi.harmonization.utils_chenling import get_matrix_from_dir

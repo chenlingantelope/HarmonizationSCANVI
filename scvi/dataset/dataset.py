@@ -436,10 +436,10 @@ def subsetByGenenames(dataset, subsetnames):
 
 def SubsetGenes(dataset1,dataset2,gene_dataset,plotname,ngenes=1000):
     import pandas as pd
-    genes1 = pd.read_table('../Seurat_data/' + plotname + '.1.hvg_info.csv', delimiter=',')
+    genes1 = pd.read_csv('../harmonization/Seurat_data/' + plotname + '.1.hvg_info.csv')
     geneid1 = np.asarray([x.replace('gene_', '') for x in genes1[genes1.keys()[0]]]).astype('int')
     genenames1 = genes1['genename']
-    genes2 = pd.read_table('../Seurat_data/' + plotname + '.2.hvg_info.csv', delimiter=',')
+    genes2 = pd.read_csv('../harmonization/Seurat_data/' + plotname + '.2.hvg_info.csv')
     geneid2 = np.asarray([x.replace('gene_', '') for x in genes2[genes2.keys()[0]]]).astype('int')
     genenames2 = genes2['genename']
     assert np.sum(np.asarray(genenames1) == gene_dataset.gene_names) == len(gene_dataset.gene_names)

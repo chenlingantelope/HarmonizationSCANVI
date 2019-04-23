@@ -61,7 +61,7 @@ class SCMAP():
             labels = None
 
         gene_names, uniq = np.unique(gene_names, return_index=True)
-        ro.r('counts <- readMM("../Seurat_data/%s.X.mtx")' % filename)
+        ro.r('counts <- readMM("/data/yosef2/users/chenling/harmonization/Seurat_data/%s.X.mtx")' % filename)
         ro.r.assign("batch_id", ro.IntVector(batch_id))
         ro.r.assign("gene_names", ro.StrVector(gene_names))
         ro.r.assign("uniq", ro.IntVector(uniq+1))
