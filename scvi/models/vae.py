@@ -121,11 +121,9 @@ class VAE(nn.Module):
         ql_m, ql_v, library = self.l_encoder(x)
         return library
 
-
-
-    def get_sample_scale(self, x, batch_index=None, y=None, n_samples=1):
-        r"""Returns the tensor of predicted frequencies of expression
-
+    def get_log_ratio(self, x, batch_index=None, y=None, n_samples=1, force_batch=None):
+        r"""Returns the tensor of log_pz + log_px_z - log_qz_x
+        :param force_batch: impute in forced batch
         :param x: tensor of values with shape ``(batch_size, n_input)``
         :param batch_index: array that indicates which batch the cells belong to with shape ``batch_size``
         :param y: tensor of cell-types labels with shape ``(batch_size, n_labels)``
@@ -133,7 +131,26 @@ class VAE(nn.Module):
         :return: tensor of predicted frequencies of expression with shape ``(batch_size, n_input)``
         :rtype: :py:class:`torch.Tensor`
         """
-        return self.inference(x, batch_index=batch_index, y=y, n_samples=n_samples)[0]
+        px_scale, px_r, px_rate, px_dropout, qz_m, qz_v, z, ql_m, ql_v, library = \
+            self.inference(x, batch_index=batch_index, y=y, n_samples=n_samples, force_batch=force_batch)
+
+        log_px_z = self._reconstruction_loss(x, px_rate, px_r, px_dropout)
+        log_pz = Normal(torch.zeros_like(qz_m), torch.ones_like(qz_v)).log_prob(z).sum(dim=-1)
+        log_qz_x = Normal(qz_m, qz_v.sqrt()).log_prob(z).sum(dim=-1)
+        return log_pz + log_px_z - log_qz_x
+
+    def get_sample_scale(self, x, batch_index=None, y=None, n_samples=1, force_batch=None):
+        r"""Returns the tensor of predicted frequencies of expression
+
+        :param x: tensor of values with shape ``(batch_size, n_input)``
+        :param batch_index: array that indicates which batch the cells belong to with shape ``batch_size``
+        :param y: tensor of cell-types labels with shape ``(batch_size, n_labels)``
+        :param n_samples: number of samples
+        :param force_batch: return imputations for a fixed batch
+        :return: tensor of predicted frequencies of expression with shape ``(batch_size, n_input)``
+        :rtype: :py:class:`torch.Tensor`
+        """
+        return self.inference(x, batch_index=batch_index, y=y, n_samples=n_samples, force_batch=force_batch)[0]
 
     def get_sample_rate(self, x, batch_index=None, y=None, n_samples=1):
         r"""Returns the tensor of means of the negative binomial distribution
@@ -164,10 +181,13 @@ class VAE(nn.Module):
         px_scale, _, _, _ = self.decoder('gene', z, library, batch_index)
         return px_scale
 
-    def inference(self, x, batch_index=None, y=None, n_samples=1):
+    def inference(self, x, batch_index=None, y=None, n_samples=1, force_batch=None):
         x_ = x
         if self.log_variational:
             x_ = torch.log(1 + x_)
+
+        if force_batch is not None:
+            batch_index = torch.zeros_like(batch_index).fill_(force_batch)
 
         # Sampling
         qz_m, qz_v, z = self.z_encoder(x_, y)
