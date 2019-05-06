@@ -109,18 +109,23 @@ def trainVAE(gene_dataset, filename, rep, nlayers=2, n_hidden=128, reconstructio
 def trainSCANVI(gene_dataset, model_type, filename, rep, nlayers=2, reconstruction_loss: str = "zinb"):
     vae_posterior = trainVAE(gene_dataset, filename, rep, reconstruction_loss=reconstruction_loss)
     filename = '../' + filename + '/' + model_type + '.' + reconstruction_loss + '.rep' + str(rep) + '.pkl'
-    scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_labels, n_layers=nlayers, reconstruction_loss=reconstruction_loss)
+    scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_labels, n_layers=nlayers,
+                    reconstruction_loss=reconstruction_loss)
     scanvi.load_state_dict(vae_posterior.model.state_dict(), strict=False)
     if model_type == 'scanvi1':
         trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset, classification_ratio=0,
                                                         n_epochs_classifier=100, lr_classification=5 * 1e-3)
-        trainer_scanvi.labelled_set = trainer_scanvi.create_posterior(indices=(gene_dataset.batch_indices.ravel() == 0))
+        labelled = np.where(gene_dataset.batch_indices.ravel() == 0)[0]
+        labelled = np.random.choice(labelled, len(labelled), replace=False)
+        trainer_scanvi.labelled_set = trainer_scanvi.create_posterior(indices=labelled)
         trainer_scanvi.unlabelled_set = trainer_scanvi.create_posterior(
             indices=(gene_dataset.batch_indices.ravel() == 1))
     elif model_type == 'scanvi2':
         trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset, classification_ratio=0,
                                                         n_epochs_classifier=100, lr_classification=5 * 1e-3)
-        trainer_scanvi.labelled_set = trainer_scanvi.create_posterior(indices=(gene_dataset.batch_indices.ravel() == 1))
+        labelled = np.where(gene_dataset.batch_indices.ravel() == 1)[0]
+        labelled = np.random.choice(labelled, len(labelled), replace=False)
+        trainer_scanvi.labelled_set = trainer_scanvi.create_posterior(indices=labelled)
         trainer_scanvi.unlabelled_set = trainer_scanvi.create_posterior(
             indices=(gene_dataset.batch_indices.ravel() == 0))
     elif model_type == 'scanvi0':
@@ -296,14 +301,12 @@ def run_model(model_type, gene_dataset, dataset1, dataset2, filename='temp', rep
         latent = pred1
         stats = pred2
 
-    elif model_type.startswith('JDA'):
+    elif model_type=='coral':
         print(model_type)
-        kernel_dict = {'JDA_linear': 'linear', 'JDA_rbf': 'rbf', 'JDA_sam': 'sam'}
-        kernel = kernel_dict[model_type]
-        if os.path.isfile('../' + filename + '/' + 'jda.1.'+ kernel +'.npy'):
-            print('../' + filename + '/' + 'jda.1.'+ kernel +'.npy')
-            pred1 = np.load('../' + filename + '/' + 'jda.1.'+ kernel +'.npy')
-            pred2 = np.load('../' + filename + '/' + 'jda.2.'+ kernel +'.npy')
+        if os.path.isfile('../' + filename + '/' + 'coral.1.npy'):
+            print('../' + filename + '/' + 'coral.1.npy')
+            pred1 = np.load('../' + filename + '/' + 'coral.1.npy')
+            pred2 = np.load('../' + filename + '/' + 'coral.2.npy')
         else:
             batch = gene_dataset.batch_indices.ravel()
             labels = gene_dataset.labels.ravel()
@@ -313,13 +316,13 @@ def run_model(model_type, gene_dataset, dataset1, dataset2, filename='temp', rep
             index_1 = np.where(batch == 1)[0]
             X1 = np.log(1 + norm_X[index_0])
             X2 = np.log(1 + norm_X[index_1])
-            from scvi.harmonization.classification.JDA import JDA
-            jda = JDA(kernel_type=kernel)
-            pred1 = jda.fit_predict(X1, labels[index_0], X2)
-            jda = JDA(kernel_type=kernel)
-            pred2 = jda.fit_predict(X2, labels[index_1], X1)
-            np.save('../' + filename + '/' + 'jda.1.' + kernel + '.npy', pred1)
-            np.save('../' + filename + '/' + 'jda.2.' + kernel + '.npy', pred2)
+            from scvi.harmonization.classification.CORAL import CORAL
+            coral = CORAL()
+            pred1 = coral.fit_predict(X1, labels[index_0], X2)
+            coral = CORAL()
+            pred2 = coral.fit_predict(X2, labels[index_1], X1)
+            np.save('../' + filename + '/' + 'coral.1.npy', pred1)
+            np.save('../' + filename + '/' + 'coral.2.npy', pred2)
         latent = pred1
         stats = pred2
 
@@ -463,11 +466,9 @@ def CompareModels(gene_dataset, dataset1, dataset2, plotname, models):
     if models == 'others':
         latent1 = np.genfromtxt('../harmonization/Seurat_data/' + plotname + '.1.CCA.txt')
         latent2 = np.genfromtxt('../harmonization/Seurat_data/' + plotname + '.2.CCA.txt')
-        # for model_type in ['scmap']:
-        for model_type in ['scmap', 'readSeurat', 'Combat', 'MNN', 'PCA']:
-            # for model_type in [ 'readSeurat', 'Combat', 'MNN', 'PCA']:
+        for model_type in ['scmap', 'readSeurat','coral', 'Combat', 'MNN', 'PCA']:
             print(model_type)
-            if (model_type == 'scmap') or (model_type == 'JDA'):
+            if (model_type == 'scmap') or (model_type == 'coral'):
                 latent, batch_indices, labels, keys, stats = run_model(model_type, gene_dataset, dataset1, dataset2,
                                                                        filename=plotname)
                 pred1 = latent
@@ -498,7 +499,7 @@ def CompareModels(gene_dataset, dataset1, dataset2, plotname, models):
                 res_knn, res_knn_partial, res_kmeans, res_kmeans_partial = \
                     eval_latent(batch_indices, labels, latent, keys,
                                 labelled_idx, unlabelled_idx,
-                                plotname=plotname + '.' + model_type, plotting=True, partial_only=False)
+                                plotname=plotname + '.' + model_type, plotting=False, partial_only=False)
 
                 _, res_knn_partial1, _, res_kmeans_partial1 = \
                     eval_latent(batch_indices, labels, latent, keys,
@@ -557,7 +558,7 @@ def CompareModels(gene_dataset, dataset1, dataset2, plotname, models):
             res_knn, res_knn_partial, res_kmeans, res_kmeans_partial = \
                 eval_latent(batch_indices=batch_indices, labels=labels, latent=latent, keys=keys,
                             labelled_idx=labelled_idx, unlabelled_idx=unlabelled_idx,
-                            plotname=plotname + '.' + model_type, plotting=True, partial_only=False)
+                            plotname=plotname + '.' + model_type, plotting=False, partial_only=False)
 
             _, res_knn_partial1, _, res_kmeans_partial1 = \
                 eval_latent(batch_indices=batch_indices, labels=labels, latent=latent, keys=keys,

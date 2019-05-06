@@ -108,7 +108,7 @@ class SCMAP():
         ro.r("%s<-indexCluster(%s)" % (self.reference, self.reference))
 
 
-    def predict_scmap_cluster(self, gene_dataset, filename, batch):
+    def predict_scmap_cluster(self, gene_dataset, filename, batch, return_probs=False):
         self.projection = 'test'
         self.create_sce_object(gene_dataset, filename, batch, self.projection, False)
         ro.r("result<-scmapCluster(%s, list(metadata(%s)$scmap_cluster_index), threshold=%.1f)"
@@ -116,7 +116,10 @@ class SCMAP():
         self.probs = ro.r("result$scmap_cluster_siml")
         self.labels_pred = ro.r("result$scmap_cluster_labs")  # 'unassigned' are included
         self.labels_pred = convert_labels_str(self.labels_pred)
-        return self.labels_pred
+        if return_probs is False:
+            return self.labels_pred
+        else:
+            return self.labels_pred, self.probs
 
 
     def predict_scmap_cell(self, gene_dataset, filename, batch):
@@ -128,7 +131,7 @@ class SCMAP():
         self.probs = ro.r("result$scmap_cluster_siml")
         self.labels_pred = ro.r("result$scmap_cluster_labs")  # 'unassigned' are included
         self.labels_pred = convert_labels_str(self.labels_pred)
-        return self.labels_pred
+        return self.labels_pred, self.probs
 
     def score(self, data_test, labels_test):
         labels_pred = self.predict_scmap_cluster(data_test, labels_test)
