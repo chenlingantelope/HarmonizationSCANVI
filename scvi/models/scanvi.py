@@ -103,7 +103,7 @@ class SCANVI(VAE):
             w_y = self.classifier(z)
         return w_y
 
-    def regenerate_from_fixed_info(self, sample_batch, fixed_batch, fixed_cell_type):
+    def regenerate_from_fixed_info(self, sample_batch, fixed_batch, fixed_cell_type, n_samples):
         batch_index = torch.cuda.IntTensor(sample_batch.shape[0], 1).fill_(fixed_batch)
         library = torch.cuda.FloatTensor(sample_batch.shape[0], 1).fill_(4)
         cell_type = torch.cuda.FloatTensor(sample_batch.shape[0], 1).fill_(fixed_cell_type)
@@ -114,9 +114,37 @@ class SCANVI(VAE):
         qz_m, qz_v, z = self.z_encoder(sample_batch)
         qz2_m, qz2_v, z2 = self.encoder_z2_z1(z, cell_type)
 
+        if n_samples > 1:
+            qz2_m = qz2_m.unsqueeze(0).expand((n_samples, qz2_m.size(0), qz2_m.size(1)))
+            qz2_v = qz2_v.unsqueeze(0).expand((n_samples, qz2_v.size(0), qz2_v.size(1)))
+            z2 = Normal(qz2_m, qz2_v.sqrt()).sample()
+            # flatten for injecting
+            z2 = z2.view((-1, qz2_m.size(2)))
+            batch_index = torch.cuda.IntTensor(z2.shape[0], 1).fill_(fixed_batch)
+            library = torch.cuda.FloatTensor(z2.shape[0], 1).fill_(4)
+            cell_type = torch.cuda.FloatTensor(z2.shape[0], 1).fill_(fixed_cell_type)
+
         # and then inject
         pz1_m, pz1_v = self.decoder_z1_z2(z2, cell_type)
         px_scale, _, _, _ = self.decoder('gene', pz1_m, library, batch_index)
+
+        # reshape
+        if n_samples > 1:
+            px_scale = px_scale.view((n_samples, -1, px_scale.size(1)))
+        return px_scale
+
+    def generate_latent_samples(self, cell_type, batch_info, n_samples):
+        shape_u = (n_samples, self.n_latent)
+        shape_c = (n_samples, 1)
+
+        library = torch.ones(shape_c).fill_(4.).cuda()
+        batch_index = torch.ones(shape_c).fill_(batch_info).cuda()
+        y = torch.ones(shape_c).fill_(cell_type).cuda()
+        u = Normal(torch.zeros(shape_u).cuda(), torch.ones(shape_u).cuda()).sample()
+        pz1_m, pz1_v = self.decoder_z1_z2(u, y)
+        z = Normal(pz1_m, torch.sqrt(pz1_v)).sample()
+
+        px_scale, _, _, _ = self.decoder(self.dispersion, z, library, batch_index, y)
         return px_scale
 
     def get_latents(self, x, y=None):
