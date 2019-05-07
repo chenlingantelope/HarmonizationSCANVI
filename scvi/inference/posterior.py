@@ -23,6 +23,7 @@ from scvi.models.log_likelihood import compute_log_likelihood, compute_marginal_
 import torch.nn.functional as F
 from scvi.models.utils import one_hot
 
+
 class SequentialSubsetSampler(SubsetRandomSampler):
     def __iter__(self):
         return iter(self.indices)
@@ -151,8 +152,7 @@ class Posterior:
             labels += [label]
         return np.array(torch.cat(latent).cpu()), np.array(torch.cat(batch_indices).cpu()), np.array(torch.cat(labels).cpu()).ravel()
 
-
-    def impute_from_z(self, fixed_batch_indices,fixed_l, sample=False):
+    def impute_from_z(self, fixed_batch_indices, fixed_l, sample=False):
         for tensors in self:
             sample_batch, local_l_mean, local_l_var, batch_index, label = tensors
             if not sample:
@@ -161,7 +161,8 @@ class Posterior:
                 z = [self.model.z_encoder(sample_batch)[0]]
             else:
                 z = [self.model.sample_from_posterior_z(sample_batch)]
-            px_scale, px_r, px_rate, px_dropout = self.model.decoder(self.model.dispersion, z, fixed_l, fixed_batch_indices)
+            px_scale, px_r, px_rate, px_dropout = self.model.decoder(self.model.dispersion, z, fixed_l,
+                                                                     fixed_batch_indices)
             if self.model.dispersion == "gene-label":
                 px_r = F.linear(one_hot(y, self.model.n_labels),
                                 self.px_r)  # px_r gets transposed - last dimension is nb genes
@@ -172,7 +173,6 @@ class Posterior:
             px_r = torch.exp(px_r)
 
         return px_r
-
 
     def entropy_batch_mixing(self, verbose=False, **kwargs):
         if self.gene_dataset.n_batches == 2:
@@ -185,7 +185,7 @@ class Posterior:
 
     entropy_batch_mixing.mode = 'max'
 
-    def differential_expression_stats(self, M_sampling=100):
+    def differential_expression_stats(self, M_sampling=100, force_batch=None):
         """
         Output average over statistics in a symmetric way (a against b)
         forget the sets if permutation is True
@@ -195,24 +195,34 @@ class Posterior:
         :return: A 1-d vector of statistics of size n_genes
         """
         px_scales = []
-        all_labels = []
-        batch_size = max(self.data_loader_kwargs['batch_size'] // M_sampling, 2)  # Reduce batch_size on GPU
+        log_ratios = []
+        labels_full = []
+        batch_size = max(self.data_loader_kwargs['batch_size'] // M_sampling, 10)  # Reduce batch_size on GPU
+        if len(self.gene_dataset) % batch_size == 1:
+            batch_size += 1
         for tensors in self.update({"batch_size": batch_size}):
             sample_batch, _, _, batch_index, labels = tensors
             px_scales += [
                 np.array((self.model.get_sample_scale(
-                    sample_batch, batch_index=batch_index, y=labels, n_samples=M_sampling)
+                    sample_batch, batch_index=batch_index, y=labels, n_samples=M_sampling,
+                    force_batch=force_batch)).cpu())]
+            log_ratios += [
+                np.array((self.model.get_log_ratio(
+                    sample_batch, batch_index=batch_index, y=labels, n_samples=M_sampling,
+                    force_batch=force_batch)
                          ).cpu())]
+            labels_full += [labels]
 
             # Align the sampling
-            if M_sampling > 1:
-                px_scales[-1] = (px_scales[-1].transpose((1, 0, 2))).reshape(-1, px_scales[-1].shape[-1])
-            all_labels += [np.array((labels.repeat(1, M_sampling).view(-1, 1)).cpu())]
+            # if M_sampling > 1:
+            #     px_scales[-1] = (px_scales[-1].transpose((1, 0, 2))).reshape(-1, px_scales[-1].shape[-1])
+            #     log_ratios[-1] = (log_ratios[-1].transpose((1, 0))).reshape(-1)
 
-        px_scales = np.concatenate(px_scales)
-        all_labels = np.concatenate(all_labels).ravel()  # this will be used as boolean
+        px_scales = np.concatenate(px_scales, axis=1)
+        log_ratios = np.concatenate(log_ratios, axis=1)
+        labels_full = np.concatenate(labels_full).ravel()
 
-        return px_scales, all_labels
+        return px_scales, log_ratios, labels_full
 
     def differential_expression_score(self, cell_type, other_cell_type=None, genes=None, M_sampling=100,
                                       M_permutation=10000, permutation=False):
@@ -463,7 +473,8 @@ class Posterior:
             elif color_by == 'batches and labels':
                 fig, axes = plt.subplots(1, 2, figsize=(14, 7))
                 for i in range(n_batch):
-                    axes[0].scatter(latent[batch_indices == i, 0], latent[batch_indices == i, 1], label=str(i))
+                    axes[0].scatter(latent[batch_indices == i, 0], latent[batch_indices == i, 1],
+                                    label=str(i))
                 axes[0].set_title("batch coloring")
                 axes[0].axis("off")
                 axes[0].legend()
@@ -474,7 +485,8 @@ class Posterior:
                 else:
                     plt_labels = [str(i) for i in range(len(np.unique(indices)))]
                 for i, cell_type in zip(range(self.gene_dataset.n_labels), plt_labels):
-                    axes[1].scatter(latent[indices == i, 0], latent[indices == i, 1], label=cell_type)
+                    axes[1].scatter(latent[indices == i, 0], latent[indices == i, 1],
+                                    label=cell_type)
                 axes[1].set_title("label coloring")
                 axes[1].axis("off")
                 axes[1].legend()
@@ -518,21 +530,47 @@ def entropy_batch_mixing(latent_space, batches, n_neighbors=50, n_pools=50, n_sa
     score = 0
     for t in range(n_pools):
         indices = np.random.choice(np.arange(latent_space.shape[0]), size=n_samples_per_pool)
-        score += np.mean([entropy(batches[kmatrix[indices].nonzero()[1]\
+        score += np.mean([entropy(batches[kmatrix[indices].nonzero()[1] \
             [kmatrix[indices].nonzero()[0] == i]]) for i in range(n_samples_per_pool)])
     return score / float(n_pools)
 
 
+def softmax(X, axis = None):
+    """
+    Compute the softmax of each element along an axis of X.
+    Parameters
+    ----------
+    X: ND-Array. Probably should be floats.
+    theta (optional): float parameter, used as a multiplier
+        prior to exponentiation. Default = 1.0
+    axis (optional): axis to compute values along. Default is the
+        first non-singleton axis.
+    Returns an array the same size as X. The result will sum to 1
+    along the specified axis.
+    """
+    y = np.atleast_2d(X)
+    if axis is None:
+        axis = next(j[0] for j in enumerate(y.shape) if j[1] > 1)
+    y = y - np.expand_dims(np.max(y, axis=axis), axis)
+    y = np.exp(y)
+    ax_sum = np.expand_dims(np.sum(y, axis=axis), axis)
+    p = y / ax_sum
+    if len(X.shape) == 1:
+        p = p.flatten()
+    return p
 
-def get_bayes_factors(px_scale, all_labels, cell_idx, other_cell_idx=None, genes_idx=None,
-                      m_permutation=1000000, permutation=False, logit=True):
+
+def get_IS_bayes_factors(px_scale, log_ratios, all_labels, cell_idx, other_cell_idx=None, genes_idx=None,
+                      importance_sampling=True, permutation=False, M_permutation=10000):
     '''
     Returns a list of bayes factor for all genes
     :param px_scale: The gene frequency array for all cells (might contain multiple samples per cells)
     :param all_labels: The labels array for the corresponding cell types
     :param cell_idx: The first cell type population to consider. Either a string or an idx
     :param other_cell_idx: (optional) The second cell type population to consider. Either a string or an idx
-    :param m_permutation: The number of permuted samples.
+    :param M_permutation: The number of permuted samples.
+    :param log_ratios: un-normalized weights for importance sampling
+    :param importance_sampling: whether to use IS
     :param permutation: Whether or not to permute.
     :return:
     '''
@@ -540,30 +578,66 @@ def get_bayes_factors(px_scale, all_labels, cell_idx, other_cell_idx=None, genes
     idx_other = (all_labels == other_cell_idx) if other_cell_idx is not None else (all_labels != other_cell_idx)
     if genes_idx is not None:
         px_scale = px_scale[:, genes_idx]
-    sample_rate_a = px_scale[idx].reshape(-1, px_scale.shape[1])
-    sample_rate_b = px_scale[idx_other].reshape(-1, px_scale.shape[1])
 
-    # agregate dataset
-    samples = np.vstack((sample_rate_a, sample_rate_b))
+    # first extract the data
+    sample_rate_a = px_scale[:, idx, :]
+    sample_rate_b = px_scale[:, idx_other, :]
+
+    # reshape and aggregate dataset
+    sample_rate_a = sample_rate_a.reshape((-1, px_scale.shape[2]))
+    sample_rate_b = sample_rate_b.reshape((-1, px_scale.shape[2]))
+
+    samples = np.concatenate((sample_rate_a, sample_rate_b), axis=0)
 
     # prepare the pairs for sampling
     list_1 = list(np.arange(sample_rate_a.shape[0]))
     list_2 = list(sample_rate_a.shape[0] + np.arange(sample_rate_b.shape[0]))
-    if not permutation:
-        # case1: no permutation, sample from A and then from B
-        u, v = np.random.choice(list_1, size=m_permutation), np.random.choice(list_2, size=m_permutation)
+
+    if importance_sampling:
+        # second let's normalize the weights
+        weight_a = log_ratios[:, idx]
+        weight_b = log_ratios[:, idx_other]
+        weight_a = softmax(weight_a, axis=0)
+        weight_b = softmax(weight_b, axis=0)
+        weight_a = weight_a.flatten()
+        weight_b = weight_b.flatten()
+        weights = np.concatenate((weight_a, weight_b))
+        p_a = weight_a / np.sum(idx)
+        p_b = weight_b / np.sum(idx_other)
+
+        if not permutation:
+            # case1: no permutation, sample from A and then from B
+            u, v = np.random.choice(list_1, size=M_permutation, p=p_a), \
+                       np.random.choice(list_2, size=M_permutation, p=p_b)
+        else:
+            # case2: permutation, sample from A+B twice
+            u, v = (np.random.choice(list_1 + list_2, size=M_permutation),
+                    np.random.choice(list_1 + list_2, size=M_permutation))
+
+        # then constitutes the pairs
+        first_samples = samples[u]
+        second_samples = samples[v]
+        first_weights = weights[u]
+        second_weights = weights[v]
+
+        to_sum = first_weights[:, np.newaxis] * second_weights[:, np.newaxis] * (first_samples >= second_samples)
+        incomplete_weights = first_weights * second_weights
+        res = np.sum(to_sum, axis=0) / np.sum(incomplete_weights, axis=0)
+
     else:
-        # case2: permutation, sample from A+B twice
-        u, v = (np.random.choice(list_1 + list_2, size=m_permutation),
-                np.random.choice(list_1 + list_2, size=m_permutation))
+        if not permutation:
+            # case1: no permutation, sample from A and then from B
+            u, v = np.random.choice(list_1, size=M_permutation), \
+                       np.random.choice(list_2, size=M_permutation)
+        else:
+            # case2: permutation, sample from A+B twice
+            u, v = (np.random.choice(list_1 + list_2, size=M_permutation),
+                    np.random.choice(list_1 + list_2, size=M_permutation))
 
-    # then constitutes the pairs
-    first_set = samples[u]
-    second_set = samples[v]
+        first_samples = samples[u]
+        second_samples = samples[v]
+        res = np.mean(first_samples >= second_samples, axis=0)
 
-    res = np.mean(first_set >= second_set, 0)
-    if logit:
-        res = np.log(res + 1e-8) - np.log(1 - res + 1e-8)
     return res
 
 
