@@ -336,13 +336,14 @@ def run_model(model_type, gene_dataset, dataset1, dataset2, filename='temp', rep
         batchid = gene_dataset.batch_indices.ravel().astype('int')
         mmwrite('../harmonization/Seurat_data/' + filename + '.X.mtx', count)
         np.savetxt('../harmonization/Seurat_data/' + filename + '.celltypes.txt', cell_types, fmt='%s')
-        np.save('../harmonization/Seurat_data/' + '../harmonization/Seurat_data/' + filename + '.labels.npy', labels)
+        np.save('../harmonization/Seurat_data/' + filename + '.labels.npy', labels)
         np.save('../harmonization/Seurat_data/' + filename + '.genenames.npy', genenames)
         np.save('../harmonization/Seurat_data/' + filename + '.batch.npy', batchid)
         latent = 0
         stats = 0
 
     return latent, batch_indices, labels, keys, stats
+
 
 
 def eval_latent(batch_indices, labels, latent, keys, labelled_idx=None, unlabelled_idx=None, plotname=None,

@@ -7,18 +7,17 @@ from scipy.stats import spearmanr
 from sklearn.neighbors import KNeighborsClassifier
 from scipy.stats import kendalltau
 from scvi.models.scanvi import SCANVI
-import pickle
+from copy import deepcopy
 
-import torch
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 import os
 os.chdir('/data/yosef2/users/chenling/HarmonizationSCANVI')
 
 import sys
 rep = int(sys.argv[1])
+misprop = float(sys.argv[2])
 
 def transfer_nn_labels(latent_array, labels_array, batch_indices_array):
     # Transfer labels from batch 0 to batch 1 using scVI
@@ -64,9 +63,6 @@ def eval_bayes_factor(log_fold_change, bayes_f):
 
 save_path = "../symsim_scVI/symsim_result/DE/"
 
-# count_matrix = pd.read_csv(os.path.join(save_path, "DE.obsv.csv"),
-#                            sep=",", index_col=0).T
-
 label_array = pd.read_csv(os.path.join(save_path, "DE.cell_meta.csv"),
                           sep=",", index_col=0)["pop"].values
 
@@ -75,13 +71,6 @@ batch_array = pd.read_csv(os.path.join(save_path, "DE.batchid.csv"),
 # Renumerate the batches to be between 0 and N-batches
 batch_array -= 1
 batch_array = batch_array[:, np.newaxis]
-
-# gene_names = np.array(count_matrix.columns, dtype=str)
-#
-# gene_dataset = GeneExpressionDataset(*GeneExpressionDataset.get_attributes_from_matrix(
-#     count_matrix.values, labels=label_array,
-#     batch_indices=batch_array),
-#                                      gene_names=gene_names, cell_types=np.unique(label_array))
 
 count_matrix = pd.read_csv(os.path.join(save_path, "DE.obsv.2.csv"),
                            sep=",", index_col=0).T
@@ -104,9 +93,21 @@ dataset2 = GeneExpressionDataset(*GeneExpressionDataset.get_attributes_from_matr
 dataset2.update_cells(batch_array.ravel()==1)
 
 gene_dataset = GeneExpressionDataset.concat_datasets(dataset1, dataset2)
-# gene_dataset.subsample_genes(500)
 labels = [int(gene_dataset.cell_types[i])-1 for i in gene_dataset.labels.ravel()]
-gene_dataset.labels = np.asarray(labels).reshape(len(labels),1)
+################## Generate Mis-labels
+######################################################################################
+mislabels = np.asarray(deepcopy(labels))
+mises = np.random.choice([0,1],len(mislabels),p=[1-misprop, misprop])
+pop1 = 2
+pop2 = 3
+pop1cells = (np.asarray(labels)==pop1)
+pop2cells = (np.asarray(labels)==pop2)
+
+# flip the DE
+mislabels[np.logical_and(mises, pop1cells)] = pop2
+mislabels[np.logical_and(mises, pop2cells)] = pop1
+
+gene_dataset.labels = np.asarray(mislabels).reshape(len(mislabels),1)
 gene_dataset.cell_types = dataset2.cell_types
 
 theoretical_FC = pd.read_csv(os.path.join(save_path, "theoreticalFC.csv"),
@@ -114,98 +115,49 @@ theoretical_FC = pd.read_csv(os.path.join(save_path, "theoreticalFC.csv"),
 nevf = pd.read_csv(os.path.join(save_path, "n_evf.csv"),
                              sep=",", index_col=0, header=0)
 
-# for key in theoretical_FC.columns:
-#     log_FC = theoretical_FC[key]
-#     plt.hist(log_FC)
-#     detected_genes = np.sum(np.abs(log_FC) >= 0.8)
-#     plt.title(key + ": " + str(detected_genes) + " genes / " + str(log_FC.shape[0]))
-#     plt.axvline(x=-0.8)
-#     plt.axvline(x=0.8)
-#     plt.savefig(os.path.join(save_path, key + ".png"))
-#     plt.clf()
 
-# vae = VAE(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches, reconstruction_loss="zinb", n_latent=10)
-vae = VAE(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches, reconstruction_loss="nb", n_latent=10)
+vae = VAE(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches, reconstruction_loss="zinb", n_latent=10)
 trainer = UnsupervisedTrainer(vae,
                               gene_dataset,
                               train_size=0.75,
                               use_cuda=True,
                               frequency=5, kl=1)
 
-# file_name = '%s/vae.pkl' % save_path
-# if os.path.isfile(file_name):
-#     print("loaded model from: " + file_name)
-#     trainer.model.load_state_dict(torch.load(file_name))
-#     trainer.model.eval()
-# else:
-#     print('file not found')
-    # train & save
 n_epochs = 100
 trainer.train(n_epochs=n_epochs, lr=0.001)
-# torch.save(trainer.model.state_dict(), file_name)
-#
-# # write training info
-# ll_train_set = trainer.history["ll_train_set"][1:]
-# ll_test_set = trainer.history["ll_test_set"][1:]
-# x = np.linspace(1, n_epochs, (len(ll_train_set)))
-# plt.plot(x, ll_train_set)
-# plt.plot(x, ll_test_set)
-# plt.title("training ll")
-# plt.savefig(os.path.join(save_path, "loss_training.png"))
-# plt.clf()
-
-# get latent space
 full = trainer.create_posterior(trainer.model, gene_dataset, indices=np.arange(len(gene_dataset)))
-latent, batch_indices, labels = full.sequential().get_latent()
-# n_samples_tsne = 4000
-# full.show_t_sne(n_samples=n_samples_tsne, color_by='batches and labels',
-#                 save_name=os.path.join(save_path, "scVI_tSNE_batches_labels.png"))
+latent, batch_indices, _ = full.sequential().get_latent()
 
 print("Transferring labels from scVI")
-
-true_labels = labels.ravel()
-scVI_labels = transfer_nn_labels(latent, labels, batch_indices)
+scVI_labels = transfer_nn_labels(latent, mislabels, batch_indices)
 
 # train scANVI
 print("Training scANVI")
-# scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_labels, n_latent=10)
-scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_labels, n_latent=10,
-                reconstruction_loss='nb')
+scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_labels, n_latent=10)
 scanvi.load_state_dict(trainer.model.state_dict(), strict=False)
 trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset,
                                                 n_epochs_classifier=5, lr_classification=5 * 1e-3, kl=1)
 labelled = np.where(gene_dataset.batch_indices == 0)[0]
-# np.random.shuffle(labelled)
+np.random.shuffle(labelled)
 unlabelled = np.where(gene_dataset.batch_indices == 1)[0]
-# np.random.shuffle(unlabelled)
+np.random.shuffle(unlabelled)
 trainer_scanvi.labelled_set = trainer_scanvi.create_posterior(indices=labelled)
 trainer_scanvi.unlabelled_set = trainer_scanvi.create_posterior(indices=unlabelled)
 
-# file_name = '%s/scanvi.pkl' % save_path
-# if os.path.isfile(file_name):
-#     print("loaded model from: " + file_name)
-#     trainer_scanvi.model.load_state_dict(torch.load(file_name))
-#     trainer_scanvi.model.eval()
-# else:
-# train & save
 trainer_scanvi.train(n_epochs=5)
-# torch.save(trainer_scanvi.model.state_dict(), file_name)
 
 scanvi_labels = trainer_scanvi.full_dataset.sequential().compute_predictions()[1]
 
-predicted_labels = pd.DataFrame([gene_dataset.labels.ravel(),scanvi_labels],index=['labels','scVI','scANVI'])
-predicted_labels.T.to_csv(save_path+'pred_labels.nb.%i.csv'%rep)
+# predicted_labels = pd.DataFrame([scVI_labels,scanvi_labels],index=['scVI','scANVI'])
+predicted_labels = pd.DataFrame([gene_dataset.labels.ravel(),scVI_labels, scanvi_labels],index=['labels','scVI','scANVI'])
+predicted_labels.T.to_csv(save_path+'pred_labels.%i.mis%.2f.csv' % (rep, misprop))
 
 # get latent space
 full_scanvi = trainer.create_posterior(trainer_scanvi.model, gene_dataset, indices=np.arange(len(gene_dataset)))
-latent, batch_indices, labels = full_scanvi.sequential().get_latent()
-# n_samples_tsne = 4000
-# full_scanvi.show_t_sne(n_samples=n_samples_tsne, color_by='batches and labels',
-#                        save_name=os.path.join(save_path, "scANVI_tSNE_batches_labels.png"))
-#
+latent, _, _ = full_scanvi.sequential().get_latent()
 print("OVERLAP scANVI = scVI ", np.mean(scanvi_labels == scVI_labels))
-print("accuracy scVI ", np.mean(gene_dataset.labels.ravel() == scVI_labels))
-print("accuracy scANVI ", np.mean(gene_dataset.labels.ravel() == scanvi_labels))
+print("accuracy scVI ", np.mean(labels == scVI_labels))
+print("accuracy scANVI ", np.mean(labels == scanvi_labels))
 
 # prepare for differential expression
 cell_types = gene_dataset.cell_types
@@ -249,11 +201,6 @@ for key in theoretical_FC.columns:
         np.logical_and(scVI_labels == couple_celltypes[1], gene_dataset.batch_indices.ravel() == 0))[0]
     print(len(set_a),len(set_b))
     bayes_A = get_bayes_factor_scvi(set_a, set_b, n_samples, n_cells, use_is=use_IS)
-    # roc_auc_1, roc_auc_2, spearman, kendall = eval_bayes_factor(log_FC, bayes_A)
-    # results_DE_scVI_A[key]["R1"].append(roc_auc_1)
-    # results_DE_scVI_A[key]["R2"].append(roc_auc_2)
-    # results_DE_scVI_A[key]["S"].append(spearman)
-    # results_DE_scVI_A[key]["K"].append(kendall)
 
     # cell A & batch 1 VS cell B & batch 1
     set_a = np.where(
@@ -261,11 +208,6 @@ for key in theoretical_FC.columns:
     set_b = np.where(
         np.logical_and(scVI_labels == couple_celltypes[1], gene_dataset.batch_indices.ravel() == 1))[0]
     bayes_B = get_bayes_factor_scvi(set_a, set_b, n_samples, n_cells, use_is=use_IS)
-    # roc_auc_1, roc_auc_2, spearman, kendall = eval_bayes_factor(log_FC, bayes_B)
-    # results_DE_scVI_B[key]["R1"].append(roc_auc_1)
-    # results_DE_scVI_B[key]["R2"].append(roc_auc_2)
-    # results_DE_scVI_B[key]["S"].append(spearman)
-    # results_DE_scVI_B[key]["K"].append(kendall)
 
     # all cell A FORCE batch 0 VS all cell B FORCE batch 0
     set_a = np.where(scVI_labels == couple_celltypes[0])[0]
@@ -277,68 +219,6 @@ for key in theoretical_FC.columns:
     bayes_AB2 = get_bayes_factor_scvi(set_a, set_b, n_samples, n_cells, use_is=use_IS, force_batch=1)
     # Merge BFs
     bayes_AB = 0.5 * bayes_AB1 + 0.5 * bayes_AB2
-    # roc_auc_1, roc_auc_2, spearman, kendall = eval_bayes_factor(log_FC, bayes_AB)
-    # results_DE_scVI_AB[key]["R1"].append(roc_auc_1)
-    # results_DE_scVI_AB[key]["R2"].append(roc_auc_2)
-    # results_DE_scVI_AB[key]["S"].append(spearman)
-    # results_DE_scVI_AB[key]["K"].append(kendall)
-
-    #
-    # ##########################################################
-    # # nevf = np.asarray(nevf['x'])
-    # print(eval_bayes_factor(log_FC[nevf==0],bayes_AB[nevf==0]))
-    # print(eval_bayes_factor(log_FC[nevf==1],bayes_AB[nevf==1]))
-    # print(eval_bayes_factor(log_FC[nevf==2],bayes_AB[nevf==2]))
-    # print(eval_bayes_factor(log_FC[nevf==3],bayes_AB[nevf==3]))
-    # print(eval_bayes_factor(log_FC[nevf==4],bayes_AB[nevf==4]))
-    # ##########################################################
-    # DE with true labels
-    # set_a = np.where(
-    #     np.logical_and(true_labels == couple_celltypes[0], gene_dataset.batch_indices.ravel() == 0))[0]
-    # set_b = np.where(
-    #     np.logical_and(true_labels == couple_celltypes[1], gene_dataset.batch_indices.ravel() == 0))[0]
-    # print(len(set_a),len(set_b))
-    # bayes_A = get_bayes_factor_scvi(set_a, set_b, n_samples, n_cells, use_is=use_IS)
-    # roc_auc_1, roc_auc_2, spearman, kendall = eval_bayes_factor(log_FC, bayes_A)
-    # results_DE_true_A[key]["R1"].append(roc_auc_1)
-    # results_DE_true_A[key]["R2"].append(roc_auc_2)
-    # results_DE_true_A[key]["S"].append(spearman)
-    # results_DE_true_A[key]["K"].append(kendall)
-
-    # cell A & batch 1 VS cell B & batch 1
-    # set_a = np.where(
-    #     np.logical_and(true_labels == couple_celltypes[0], gene_dataset.batch_indices.ravel() == 1))[0]
-    # set_b = np.where(
-    #     np.logical_and(true_labels == couple_celltypes[1], gene_dataset.batch_indices.ravel() == 1))[0]
-    # bayes_B = get_bayes_factor_scvi(set_a, set_b, n_samples, n_cells, use_is=use_IS)
-    # roc_auc_1, roc_auc_2, spearman, kendall = eval_bayes_factor(log_FC, bayes_B)
-    # results_DE_true_B[key]["R1"].append(roc_auc_1)
-    # results_DE_true_B[key]["R2"].append(roc_auc_2)
-    # results_DE_true_B[key]["S"].append(spearman)
-    # results_DE_true_B[key]["K"].append(kendall)
-
-    # all cell A FORCE batch 0 VS all cell B FORCE batch 0
-    # set_a = np.where(true_labels == couple_celltypes[0])[0]
-    # set_b = np.where(true_labels == couple_celltypes[1])[0]
-    # bayes_AB1 = get_bayes_factor_scvi(set_a, set_b, n_samples, n_cells, use_is=use_IS, force_batch=0)
-    # # all cell A FORCE batch 1 VS all cell B FORCE batch 1
-    # set_a = np.where(true_labels == couple_celltypes[0])[0]
-    # set_b = np.where(true_labels == couple_celltypes[1])[0]
-    # bayes_AB2 = get_bayes_factor_scvi(set_a, set_b, n_samples, n_cells, use_is=use_IS, force_batch=1)
-    # Merge BFs
-    # bayes_AB = 0.5 * bayes_AB1 + 0.5 * bayes_AB2
-    # roc_auc_1, roc_auc_2, spearman, kendall = eval_bayes_factor(log_FC, bayes_AB)
-    # results_DE_true_AB[key]["R1"].append(roc_auc_1)
-    # results_DE_true_AB[key]["R2"].append(roc_auc_2)
-    # results_DE_true_AB[key]["S"].append(spearman)
-    # results_DE_true_AB[key]["K"].append(kendall)
-
-    # DE with scANVI
-
-    # using approximate posterior, can stick to prior instead
-    # n_cells = 30
-    # n_samples = 100
-    # use_agg_post = True
 
     n_cells = 0
     n_samples = 3000
@@ -384,18 +264,5 @@ for key in theoretical_FC.columns:
                                            importance_sampling=False, permutation=False)
     # Merge BFs
     bayes_scanviAB = 0.5 * bayes_scanviAB1 + 0.5 * bayes_scanviAB2
-    # roc_auc_1, roc_auc_2, spearman, kendall = eval_bayes_factor(log_FC, bayes_scanviAB)
-    # results_DE_scANVI[key]["R1"].append(roc_auc_1)
-    # results_DE_scANVI[key]["R2"].append(roc_auc_2)
-    # results_DE_scANVI[key]["S"].append(spearman)
-    # results_DE_scANVI[key]["K"].append(kendall)
     res = pd.DataFrame([bayes_A,bayes_B,bayes_AB,bayes_scanviAB], index=['bayes_A','bayes_B','bayes_AB','bayes_scanviAB'])
-    res.T.to_csv(save_path + "result.nb.%s.%i.csv"%(key, rep))
-
-    # pickle.dump(results_DE_scVI_A, open(os.path.join(save_path, "results0.%i.dic"%rep), "wb"))
-    # pickle.dump(results_DE_scVI_B, open(os.path.join(save_path, "results1.%i.dic"%rep), "wb"))
-    # pickle.dump(results_DE_scVI_AB, open(os.path.join(save_path, "results2.%i.dic"%rep), "wb"))
-    # pickle.dump(results_DE_scANVI, open(os.path.join(save_path, "results3.%i.dic"%rep), "wb"))
-    # pickle.dump(results_DE_true_A, open(os.path.join(save_path, "results0true.%i.dic"%rep), "wb"))
-    # pickle.dump(results_DE_true_B, open(os.path.join(save_path, "results1true.%i.dic"%rep), "wb"))
-    # pickle.dump(results_DE_true_AB, open(os.path.join(save_path, "results2true.%i.dic"%rep), "wb"))
+    res.T.to_csv(save_path + "result.%s.%i.mis%.2f.csv"%(key, rep, misprop))

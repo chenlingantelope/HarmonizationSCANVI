@@ -1,6 +1,12 @@
 library(ggplot2)
 library(reshape2)
 
+
+# prop = rep(0.2,5)
+# prop = rbind(c(1:5),prop)
+# colnames(prop)=c(1:5)
+
+
 prop = read.table('celltypeprop.txt',sep='\t',row.names=NULL,as.is=T)
 ncelltypes = length(prop[1,])-1
 colnames(prop) = prop[1,]
@@ -28,8 +34,12 @@ Dotplot <- function(others,scvi,scanvi,ann,methods,plotname){
 	others = others[others[,2]==ann,]
     celltypes = colnames(prop)
     if(ann=='p1'){
+		scmap = scanvi[scanvi[,1]=='scmap1',]
+		coral = scanvi[scanvi[,1]=='coral1',]
         scanvi = scanvi[scanvi[,1]=='scanvi1',]
     }else if(ann=='p2'){
+		scmap = scanvi[scanvi[,1]=='scmap2',]
+		coral = scanvi[scanvi[,1]=='coral2',]
         scanvi = scanvi[scanvi[,1]=='scanvi2',]
     }else if(ann=='p'){
         scanvi = scanvi[scanvi[,1]=='scanvi',]
@@ -38,14 +48,25 @@ Dotplot <- function(others,scvi,scanvi,ann,methods,plotname){
 		}else if(ann=='p2'){prop_values = as.numeric(prop[3,])
 			}else{prop_values = as.numeric(prop[1,])}
 	res = lapply(celltypes,function(celltype){
-		temp =  c(others[,colnames(others)==celltype],
+		if(ann!='p'){
+			temp =  c(others[,colnames(others)==celltype],
+			scvi[,colnames(scvi)==celltype],
+            scanvi[,colnames(scanvi)==celltype],
+			scmap[,colnames(scmap)==celltype],
+			coral[,colnames(coral)==celltype]
+		)}else{
+			temp =  c(others[,colnames(others)==celltype],
 			scvi[,colnames(scvi)==celltype],
             scanvi[,colnames(scanvi)==celltype]
-		)
+		)}
 		return(temp)
 	})
 	res = do.call(cbind,res)
-	rownames(res) = c(others[,1],scvi[,1],'scanvi')
+	if(ann=='p'){
+		rownames(res) = c(others[,1],scvi[,1],'scanvi')
+	}else{
+		rownames(res) = c(others[,1],scvi[,1],'scanvi','scmap','coral')
+	}
 	celltypes = celltypes[order(prop_values)]
 	res = res[,order(prop_values)]
 	prop_values = prop_values[order(prop_values)]
@@ -67,16 +88,20 @@ Dotplot <- function(others,scvi,scanvi,ann,methods,plotname){
     }else if('CCA' %in% methods){
             colors = c('red','darkgreen','blue')
     }
-    recover()
 	df$prop = prop_values
+	df = df[df['SCANVI']>=0,]
 	df = melt(df,id=c('celltypes','prop','x'))
-    df$variable = factor(df$variable, levels = c('scVI','SCANVI','SCMAP','CCA','CORAL'))
+	if(ann=='p'){
+		df$variable = factor(df$variable, levels = c('scVI','SCANVI','CCA'))
+	}else{
+		df$variable = factor(df$variable, levels = c('scVI','SCANVI','SCMAP','CCA','CORAL'))
+	}
     df$celltypes = gsub("+", "", df$celltypes, fixed=TRUE)
     df$celltypes = gsub("..", " ", df$celltypes, fixed=TRUE)
     df$celltypes = gsub(".", " ", df$celltypes, fixed=TRUE)
     # print(df$celltypes)
 	p = ggplot(df,aes(x,value)) +
-	geom_point(aes(size=prop,colour=variable)) + ylim(0,1.1)  +
+	geom_point(aes(size=prop,colour=variable), position = position_dodge(.3)) + ylim(0,1.1)  +
 	scale_size_area(max_size = max(df$prop)*40,breaks=c(0,0.05,0.1,0.15,0.2))+
 	scale_x_continuous(breaks=df$x[df$variable=='scVI'],labels=df$celltypes[df$variable=='scVI']) +
 	theme(text = element_text(size=25),axis.text.x = element_text(angle = 45, hjust = 1),

@@ -7,15 +7,12 @@ matplotlib.rcParams['ps.fonttype'] = 42
 
 
 dataname = str(sys.argv[1])
-compare = str(sys.argv[2])
-if compare=='scvi_others':
-    scvi = pd.read_csv('../' + dataname + '/scvi_nb.res.txt',delimiter=' ')
-    scvi['model_type'] = [x + 'NB' for x in scvi['model_type'] ]
-    others = pd.read_csv('../' + dataname + '/scvi.res.txt',delimiter=' ')
-else:
-    scvi = pd.read_csv('../' + dataname + '/scvi_nb.res.txt',delimiter=' ')
-    scvi['model_type'] = [x + 'NB' for x in scvi['model_type'] ]
-    others = pd.read_csv('../' + dataname + '/scvi.res.txt',delimiter=' ')
+# scvi = pd.read_csv('../' + dataname + '/scvi_nb.res.txt',delimiter=' ')
+# scvi['model_type'] = [x + 'NB' for x in scvi['model_type'] ]
+# others = pd.read_csv('../' + dataname + '/scvi.res.txt',delimiter=' ')
+scvi = pd.read_csv('../' + dataname + '/scvi.res.txt',delimiter=' ')
+others = pd.read_csv('../' + dataname + '/others.res.txt',delimiter=' ')
+
 
 stats = pd.concat([scvi,others])
 model_types = stats['model_type']
@@ -31,13 +28,13 @@ model_types = np.unique(model_types)
 res = np.asarray(res)
 
 sorted_res=[]
-# methods = ['vae', 'scanvi1', 'scanvi2', 'vae_nb', 'scanvi1_nb', 'scanvi2_nb', 'readSeurat', 'MNN', 'Combat', 'PCA']
-# model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB', 'CCA', 'MNN', 'Combat', 'PCA']
-# colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'm', 'c')
+# methods = ['vae', 'scanvi1', 'scanvi2', 'vae_nb', 'scanvi1_nb', 'scanvi2_nb']
+# model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB']
+# colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'y--', 'b:', 'y:', 'y-.')
 
-methods = ['vae', 'scanvi1', 'scanvi2', 'vae_nb', 'scanvi1_nb', 'scanvi2_nb', 'vaeNB', 'scanvi1NB', 'scanvi2NB', 'vae_nbNB', 'scanvi1_nbNB', 'scanvi2_nbNB']
-model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB','scVINB', 'SCANVI1NB', 'SCANVI2NB', 'scVI_NBNB', 'SCANVI1_NBNB', 'SCANVI2_NBNB']
-colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'y--', 'b:', 'y:', 'y-.')
+methods = ['vae', 'scanvi1', 'scanvi2','readSeurat', 'MNN', 'Combat', 'PCA']
+model_names = ['scVI', 'SCANVI1', 'SCANVI2',  'CCA', 'MNN', 'Combat', 'PCA']
+colors = ('r', 'g', 'g--', 'b', 'y', 'm', 'c')
 
 
 for x in methods:
@@ -62,7 +59,7 @@ for i,x in enumerate(model_names):
 
 legend = plt.legend(loc='lower right', shadow=False)
 # plt.savefig("../%s/%s_compare4_KNN.pdf" % (dataname,dataname))
-plt.savefig("../%s/%s_nb_compare_KNN.pdf" % (dataname,dataname))
+plt.savefig("../%s/%s.KNN.pdf" % (dataname,dataname))
 #
 # plt.figure(figsize=(5, 5))
 # colors = ('r','g','b','y','m','c')

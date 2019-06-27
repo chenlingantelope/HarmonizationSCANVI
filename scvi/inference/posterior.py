@@ -211,15 +211,16 @@ class Posterior:
                     sample_batch, batch_index=batch_index, y=labels, n_samples=M_sampling,
                     force_batch=force_batch)
                          ).cpu())]
-            labels_full += [labels]
+            labels_full += [labels.cpu()]
 
             # Align the sampling
             # if M_sampling > 1:
             #     px_scales[-1] = (px_scales[-1].transpose((1, 0, 2))).reshape(-1, px_scales[-1].shape[-1])
             #     log_ratios[-1] = (log_ratios[-1].transpose((1, 0))).reshape(-1)
 
-        px_scales = np.concatenate(px_scales, axis=1)
+
         log_ratios = np.concatenate(log_ratios, axis=1)
+        px_scales = np.concatenate(px_scales, axis=1)
         labels_full = np.concatenate(labels_full).ravel()
 
         return px_scales, log_ratios, labels_full

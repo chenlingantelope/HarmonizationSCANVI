@@ -2,6 +2,7 @@ plotname = 'DentateGyrus'
 import sys
 models = str(sys.argv[1])
 import pickle as pkl
+import numpy as np
 import sys
 sys.path.append("/data/yosef2/users/chenling/HarmonizationSCANVI")
 
@@ -14,12 +15,14 @@ dataset2 = DentateGyrusC1()
 dataset2.subsample_genes(dataset2.nb_genes)
 gene_dataset = GeneExpressionDataset.concat_datasets(dataset1,dataset2)
 
+###########################################################################
 # f = open('../%s/gene_dataset.pkl'%plotname, 'wb')
 # pkl.dump(gene_dataset, f)
 # f.close()
 # f = open('../%s/gene_dataset.pkl'%plotname, 'rb')
 # gene_dataset = pkl.load(f)
 # f.close()
+###########################################################################
 
 import numpy as np
 f = open("../%s/celltypeprop.txt"%plotname, "w+")
@@ -35,6 +38,7 @@ f.close()
 from scvi.harmonization.utils_chenling import CompareModels
 CompareModels(gene_dataset, dataset1, dataset2, plotname, models)
 
+###########################################################################
 # from scipy.sparse import csr_matrix
 # from scvi.harmonization.utils_chenling import CompareModels, VAEstats
 # gene_dataset.X = csr_matrix(gene_dataset.X)
@@ -42,3 +46,4 @@ CompareModels(gene_dataset, dataset1, dataset2, plotname, models)
 # latent, batch_indices, labels, stats = VAEstats(full)
 # dropout, mean, disp = full.generate_parameters()
 #
+###########################################################################

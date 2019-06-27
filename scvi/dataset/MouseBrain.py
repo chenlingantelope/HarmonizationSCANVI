@@ -6,7 +6,7 @@ import os
 
 
 class ZeiselMoleArchData(GeneExpressionDataset):
-    def __init__(self, save_path='/data/mouse_brain/',coarse=True):
+    def __init__(self, save_path='/data/yosef2/scratch/chenling/scanvi_data/',coarse=True):
         self.save_path = save_path
         count, labels, cell_type, gene_names,labels_groups,groups = self.preprocess()
         labels = labels.astype('int')
@@ -58,7 +58,7 @@ class ZeiselMoleArchData(GeneExpressionDataset):
 
 
 class ZeiselCortexOnly(GeneExpressionDataset):
-    def __init__(self, save_path='/data/mouse_brain/cortex1/',coarse=True):
+    def __init__(self, save_path='/data/yosef2/scratch/chenling/scanvi_data/cortex1/',coarse=True):
         self.save_path = save_path
         count, labels, cell_type, gene_names,labels_groups,groups,batch = self.preprocess()
         labels = labels.astype('int')
