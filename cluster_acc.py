@@ -56,49 +56,85 @@ def RunClusterAcc(dataset1, dataset2, gene_dataset,plotname):
     np.savetxt("%s.clusterScore.csv" % (plotname), res, "%.4f", ',')
 
 
-plotname = 'DentateGyrus'
-from scvi.dataset.dataset import GeneExpressionDataset
-from scvi.dataset.MouseBrain import DentateGyrus10X, DentateGyrusC1
+# plotname = 'DentateGyrus'
+# from scvi.dataset.dataset import GeneExpressionDataset
+# from scvi.dataset.MouseBrain import DentateGyrus10X, DentateGyrusC1
+#
+# dataset1= DentateGyrus10X()
+# dataset1.subsample_genes(dataset1.nb_genes)
+# dataset2 = DentateGyrusC1()
+# dataset2.subsample_genes(dataset2.nb_genes)
+# gene_dataset = GeneExpressionDataset.concat_datasets(dataset1,dataset2)
+# RunClusterAcc(dataset1,dataset2,gene_dataset,plotname)
+#
+# plotname = 'Pancreas'
+# f = open('../%s/gene_dataset.pkl'%plotname, 'rb')
+# gene_dataset, dataset1, dataset2 = pkl.load(f)
+# f.close()
+# RunClusterAcc(dataset1,dataset2,gene_dataset,plotname)
+#
+# from scvi.dataset.pbmc import PbmcDataset
+# from scvi.harmonization.utils_chenling import get_matrix_from_dir,assign_label
+# plotname = 'PBMC8KCITE'
+# dataset1 = PbmcDataset(filter_out_de_genes=False)
+# dataset1.update_cells(dataset1.batch_indices.ravel()==0)
+# dataset1.subsample_genes(dataset1.nb_genes)
+# save_path='/data/yosef2/scratch/chenling/scanvi_data/'
+# count, geneid, cellid = get_matrix_from_dir(save_path + 'cite')
+# count = count.T.tocsr()
+# seurat = np.genfromtxt(save_path + 'cite/cite.seurat.labels', dtype='str', delimiter=',')
+# cellid = np.asarray([x.split('-')[0] for x in cellid])
+# labels_map = [0, 0, 1, 2, 3, 4, 5, 6]
+# labels = seurat[1:, 4]
+# cell_type = ['CD4 T cells', 'NK cells', 'CD14+ Monocytes', 'B cells','CD8 T cells', 'FCGR3A+ Monocytes', 'Other']
+# dataset2 = assign_label(cellid, geneid, labels_map, count, cell_type, seurat)
+# set(dataset2.cell_types).intersection(set(dataset2.cell_types))
+# dataset1.subsample_genes(dataset1.nb_genes)
+# dataset2.subsample_genes(dataset2.nb_genes)
+# gene_dataset = GeneExpressionDataset.concat_datasets(dataset1, dataset2)
+# RunClusterAcc(dataset1,dataset2,gene_dataset,plotname)
+#
+# plotname = 'MarrowTM'
+# from scvi.dataset.muris_tabula import TabulaMuris
+# dataset1 = TabulaMuris('facs', save_path='/data/yosef2/scratch/chenling/scanvi_data/')
+# dataset2 = TabulaMuris('droplet', save_path='/data/yosef2/scratch/chenling/scanvi_data/')
+# dataset1.subsample_genes(dataset1.nb_genes)
+# dataset2.subsample_genes(dataset2.nb_genes)
+# gene_dataset = GeneExpressionDataset.concat_datasets(dataset1, dataset2)
+# RunClusterAcc(dataset1,dataset2,gene_dataset,plotname)
 
-dataset1= DentateGyrus10X()
-dataset1.subsample_genes(dataset1.nb_genes)
-dataset2 = DentateGyrusC1()
-dataset2.subsample_genes(dataset2.nb_genes)
-gene_dataset = GeneExpressionDataset.concat_datasets(dataset1,dataset2)
-RunClusterAcc(dataset1,dataset2,gene_dataset,plotname)
 
-plotname = 'Pancreas'
-f = open('../%s/gene_dataset.pkl'%plotname, 'rb')
-gene_dataset, dataset1, dataset2 = pkl.load(f)
-f.close()
-RunClusterAcc(dataset1,dataset2,gene_dataset,plotname)
-
-from scvi.dataset.pbmc import PbmcDataset
-from scvi.harmonization.utils_chenling import get_matrix_from_dir,assign_label
-plotname = 'PBMC8KCITE'
-dataset1 = PbmcDataset(filter_out_de_genes=False)
-dataset1.update_cells(dataset1.batch_indices.ravel()==0)
-dataset1.subsample_genes(dataset1.nb_genes)
-save_path='/data/yosef2/scratch/chenling/scanvi_data/'
-count, geneid, cellid = get_matrix_from_dir(save_path + 'cite')
-count = count.T.tocsr()
-seurat = np.genfromtxt(save_path + 'cite/cite.seurat.labels', dtype='str', delimiter=',')
-cellid = np.asarray([x.split('-')[0] for x in cellid])
-labels_map = [0, 0, 1, 2, 3, 4, 5, 6]
-labels = seurat[1:, 4]
-cell_type = ['CD4 T cells', 'NK cells', 'CD14+ Monocytes', 'B cells','CD8 T cells', 'FCGR3A+ Monocytes', 'Other']
-dataset2 = assign_label(cellid, geneid, labels_map, count, cell_type, seurat)
-set(dataset2.cell_types).intersection(set(dataset2.cell_types))
-dataset1.subsample_genes(dataset1.nb_genes)
-dataset2.subsample_genes(dataset2.nb_genes)
+plotname = 'sim'
+from scvi.dataset import GeneExpressionDataset
+import pandas as pd
+import os
+save_path = "../symsim_scVI/symsim_result/DE/"
+label_array = pd.read_csv(os.path.join(save_path, "DE.cell_meta.csv"),
+                          sep=",", index_col=0)["pop"].values
+batch_array = pd.read_csv(os.path.join(save_path, "DE.batchid.csv"),
+                          sep=",", index_col=0)["x"].values
+batch_array -= 1
+batch_array = batch_array[:, np.newaxis]
+count_matrix = pd.read_csv(os.path.join(save_path, "DE.obsv.2.csv"),
+                           sep=",", index_col=0).T
+gene_names = np.array(count_matrix.columns, dtype=str)
+dataset1 = GeneExpressionDataset(*GeneExpressionDataset.get_attributes_from_matrix(
+    count_matrix.values, labels=label_array,batch_indices=batch_array),
+    gene_names=gene_names, cell_types=np.unique(label_array))
+dataset1.update_cells(batch_array.ravel()==0)
+count_matrix = pd.read_csv(os.path.join(save_path, "DE.obsv.4.csv"),
+                           sep=",", index_col=0).T
+dataset2 = GeneExpressionDataset(*GeneExpressionDataset.get_attributes_from_matrix(
+    count_matrix.values, labels=label_array,batch_indices=batch_array),
+    gene_names=gene_names, cell_types=np.unique(label_array))
+dataset2.update_cells(batch_array.ravel()==1)
 gene_dataset = GeneExpressionDataset.concat_datasets(dataset1, dataset2)
-RunClusterAcc(dataset1,dataset2,gene_dataset,plotname)
+# gene_dataset.subsample_genes(500)
+labels = [int(gene_dataset.cell_types[i])-1 for i in gene_dataset.labels.ravel()]
+gene_dataset.labels = np.asarray(labels).reshape(len(labels),1)
+gene_dataset.cell_types = dataset2.cell_types
 
-plotname = 'MarrowTM'
-from scvi.dataset.muris_tabula import TabulaMuris
-dataset1 = TabulaMuris('facs', save_path='/data/yosef2/scratch/chenling/scanvi_data/')
-dataset2 = TabulaMuris('droplet', save_path='/data/yosef2/scratch/chenling/scanvi_data/')
-dataset1.subsample_genes(dataset1.nb_genes)
-dataset2.subsample_genes(dataset2.nb_genes)
-gene_dataset = GeneExpressionDataset.concat_datasets(dataset1, dataset2)
+gene_dataset.gene_names = gene_dataset.gene_names.astype('int')
+dataset1.gene_names = dataset1.gene_names.astype('int')
+dataset2.gene_names = dataset2.gene_names.astype('int')
 RunClusterAcc(dataset1,dataset2,gene_dataset,plotname)

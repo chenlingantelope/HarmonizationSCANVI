@@ -6,21 +6,23 @@
 library(edgeR)
 library(Matrix)
 setwd('/data/yosef2/users/chenling/symsim_scVI/symsim_result/DE')
-
-count = read.csv("DE.obsv.csv", header=F)
+count = readMM('PBMC.count.mtx')
 count = t(count)
-# count = count[,c(2:length(count[1,]))]
-genenames = as.character(c(1:length(count[,1])))
-batchid = read.csv("DE.batchid.csv")[,2]
+batchid = read.csv("PBMC.batchid.csv")[,1]
+batchid = batchid+1
+genenames = read.csv('PBMC.genenames.txt',as.is=T)[,1]
+# CD4 3364
+# CD8 948
+# Dendritic 209
+# B 1060
 
 PairwiseDE <- function(count, celllabels, pop1, pop2, batchid, name, ncells=30){
     subset1 = c(1:length(celllabels))[celllabels==pop1]
 	subset2 = c(1:length(celllabels))[celllabels==pop2]
     subset = c(sample(subset1, ncells, replace=T),sample(subset2, ncells, replace=T))
     count = count[,subset]
-	celllabels = celllabels[subset]
 	batchid = batchid[subset]
-    group = as.factor(celllabels)
+    group = as.factor(celllabels[subset])
     y <- DGEList(counts=count, group=group)
     # cdr <- scale(colMeans(count > 0))
     if( length(unique(batchid))>1 ){
@@ -36,29 +38,35 @@ PairwiseDE <- function(count, celllabels, pop1, pop2, batchid, name, ncells=30){
     y <- estimateDisp(y, design)
     fit <- glmFit(y, design)
     lrt <- glmLRT(fit, coef="bio")
-    write.csv(lrt$table, file=paste('EdgeR/SIM.',name, '.',pop1,pop2,'.edgeR.csv',sep=''))
+    write.csv(lrt$table, file=paste('EdgeR/PBMC.',name,'.edgeR.csv',sep=''))
 }
+
+pred_labels = read.csv(paste('PBMC.pred_labels.',rep,'.mis','0.00','.csv',sep=''))
+pred_labels = pred_labels+1
+temp = table(pred_labels[,2])
+CD4 = c(1:10)[temp==3364]
+CD8= c(1:10)[temp==948]
+DC = c(1:10)[temp==209]
+B = c(1:10)[temp==1060]
+labels = pred_labels[,2]
+labels[batchid==2]=pred_labels[batchid==2,3]
 
 for(rep in c(1:10)){
 for (mis in as.character(c('0.00','0.05','0.10','0.15','0.20','0.25','0.30'))){
-    pred_labels = read.csv(paste('SIM.pred_labels.',rep,'.mis',mis,'.csv',sep=''))
-    pred_labels = pred_labels+1
     print(paste(rep,mis,sep='.'))
-    PairwiseDE(count, pred_labels[,2], 4,5,batchid,paste('AB',rep,mis,sep='.'))
-    PairwiseDE(count, pred_labels[,2], 2,3,batchid,paste('AB',rep,mis,sep='.'))
-    PairwiseDE(count, pred_labels[,2], 2,4,batchid,paste('AB',rep,mis,sep='.'))
-    PairwiseDE(count, pred_labels[,2], 1,2,batchid,paste('AB',rep,mis,sep='.'))
+    mislabels = labels
+    mises = rbinom(prob=as.numeric(mis),size=1,n=length(labels))
+    mislabels[mises & (labels==B)]=DC
+    mislabels[mises & (labels==DC)]=B
 
-    PairwiseDE(count[,batchid==1], pred_labels[,2][batchid==1], 4,5,batchid[batchid==1],paste('A',rep,mis,sep='.'))
-    PairwiseDE(count[,batchid==1], pred_labels[,2][batchid==1], 2,3,batchid[batchid==1],paste('A',rep,mis,sep='.'))
-    PairwiseDE(count[,batchid==1], pred_labels[,2][batchid==1], 2,4,batchid[batchid==1],paste('A',rep,mis,sep='.'))
-    PairwiseDE(count[,batchid==1], pred_labels[,2][batchid==1], 1,2,batchid[batchid==1],paste('A',rep,mis,sep='.'))
+    PairwiseDE(count, mislabels, CD4,CD8,batchid,paste('AB',rep,'CD4CD8',mis,sep='.'))
+    PairwiseDE(count, mislabels, B,DC,batchid,paste('AB',rep,'BDC',mis,sep='.'))
 
+    PairwiseDE(count[,batchid==1], mislabels[batchid==1], CD4,CD8,batchid[batchid==1],paste('A',rep,'CD4CD8',mis,sep='.'))
+    PairwiseDE(count[,batchid==1], mislabels[batchid==1], B,DC,batchid[batchid==1],paste('A',rep,'BDC',mis,sep='.'))
 
-    PairwiseDE(count[,batchid==2], pred_labels[,2][batchid==2], 4,5,batchid[batchid==2],paste('B',rep,mis,sep='.'))
-    PairwiseDE(count[,batchid==2], pred_labels[,2][batchid==2], 2,3,batchid[batchid==2],paste('B',rep,mis,sep='.'))
-    PairwiseDE(count[,batchid==2], pred_labels[,2][batchid==2], 2,4,batchid[batchid==2],paste('B',rep,mis,sep='.'))
-    PairwiseDE(count[,batchid==2], pred_labels[,2][batchid==2], 1,2,batchid[batchid==2],paste('B',rep,mis,sep='.'))
+    PairwiseDE(count[,batchid==2], mislabels[batchid==2], CD4,CD8,batchid[batchid==2],paste('B',rep,'CD4CD8',mis,sep='.'))
+    PairwiseDE(count[,batchid==2], mislabels[batchid==2], B,DC,batchid[batchid==2],paste('B',rep,'BDC',mis,sep='.'))
 
 }}
 

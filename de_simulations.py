@@ -130,7 +130,7 @@ trainer = UnsupervisedTrainer(vae,
                               gene_dataset,
                               train_size=0.75,
                               use_cuda=True,
-                              frequency=5, kl=1)
+                              frequency=5)
 
 # file_name = '%s/vae.pkl' % save_path
 # if os.path.isfile(file_name):
@@ -142,7 +142,7 @@ trainer = UnsupervisedTrainer(vae,
     # train & save
 n_epochs = 100
 trainer.train(n_epochs=n_epochs, lr=0.001)
-# torch.save(trainer.model.state_dict(), file_name)
+torch.save(trainer.model.state_dict(), save_path+'SIM.%i.nb.pkl'%rep)
 #
 # # write training info
 # ll_train_set = trainer.history["ll_train_set"][1:]
@@ -173,7 +173,7 @@ scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_la
                 reconstruction_loss='nb')
 scanvi.load_state_dict(trainer.model.state_dict(), strict=False)
 trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset,
-                                                n_epochs_classifier=5, lr_classification=5 * 1e-3, kl=1)
+                                                n_epochs_classifier=5, lr_classification=5 * 1e-3)
 labelled = np.where(gene_dataset.batch_indices == 0)[0]
 # np.random.shuffle(labelled)
 unlabelled = np.where(gene_dataset.batch_indices == 1)[0]
@@ -193,7 +193,7 @@ trainer_scanvi.train(n_epochs=5)
 
 scanvi_labels = trainer_scanvi.full_dataset.sequential().compute_predictions()[1]
 
-predicted_labels = pd.DataFrame([gene_dataset.labels.ravel(),scanvi_labels],index=['labels','scVI','scANVI'])
+predicted_labels = pd.DataFrame([gene_dataset.labels.ravel(),scVI_labels, scanvi_labels],index=['labels','scVI','scANVI'])
 predicted_labels.T.to_csv(save_path+'pred_labels.nb.%i.csv'%rep)
 
 # get latent space
@@ -336,13 +336,13 @@ for key in theoretical_FC.columns:
     # DE with scANVI
 
     # using approximate posterior, can stick to prior instead
-    # n_cells = 30
-    # n_samples = 100
-    # use_agg_post = True
+    n_cells = 30
+    n_samples = 100
+    use_agg_post = True
 
-    n_cells = 0
-    n_samples = 3000
-    use_agg_post = False
+    # n_cells = 0
+    # n_samples = 3000
+    # use_agg_post = False
 
 
     def scanvi_generate_scale(trainer_info, labels_info, agg_post, cell_type, batch, ncells, nsamples):

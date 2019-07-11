@@ -1,6 +1,6 @@
 from scvi.dataset import GeneExpressionDataset
 from scvi.models import VAE
-from scvi.inference import UnsupervisedTrainer, AlternateSemiSupervisedTrainer
+from scvi.inference import UnsupervisedTrainer, AlternateSemiSupervisedTrainer, SemiSupervisedTrainer
 from scvi.inference.posterior import get_IS_bayes_factors
 from sklearn.metrics import roc_auc_score
 from scipy.stats import spearmanr
@@ -73,14 +73,18 @@ donor = Dataset10X('fresh_68k_pbmc_donor_a')
 donor.gene_names = donor.gene_symbols
 donor.labels = np.repeat(0,len(donor)).reshape(len(donor),1)
 donor.cell_types = ['unlabelled']
+donor.subsample_genes(donor.nb_genes)
+
 gene_dataset = GeneExpressionDataset.concat_datasets(pbmc, donor)
 
 
 ################## Generate Mis-labels
 ######################################################################################
 labels = np.asarray(gene_dataset.labels.ravel())
-pop1 = np.where(gene_dataset.cell_types=='B cells')[0][0]
-pop2 = np.where(gene_dataset.cell_types=='Dendritic Cells')[0][0]
+# pop1 = np.where(gene_dataset.cell_types=='B cells')[0][0]
+# pop2 = np.where(gene_dataset.cell_types=='Dendritic Cells')[0][0]
+pop1 = np.where(gene_dataset.cell_types=='CD4 T cells')[0][0]
+pop2 = np.where(gene_dataset.cell_types=='CD8 T cells')[0][0]
 mislabels = deepcopy(labels)
 mises = np.random.choice([0,1],len(mislabels),p=[1-misprop, misprop])
 pop1cells = (labels==pop1)
@@ -88,18 +92,19 @@ pop2cells = (labels==pop2)
 # flip the DE
 mislabels[np.logical_and(mises, pop1cells)] = pop2
 mislabels[np.logical_and(mises, pop2cells)] = pop1
-
 gene_dataset.labels = np.asarray(mislabels).reshape(len(mislabels),1)
+gene_dataset.n_labels = len(np.unique(mislabels))
 vae = VAE(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches, reconstruction_loss="zinb", n_latent=10)
 trainer = UnsupervisedTrainer(vae,
                               gene_dataset,
-                              train_size=0.75,
                               use_cuda=True,
-                              frequency=5, kl=1)
+                              frequency=5)
 
-n_epochs = 100
-trainer.train(n_epochs=n_epochs, lr=0.001)
-torch.save(trainer.model.state_dict(), save_path+'vae.pkl')
+# n_epochs = 100
+# trainer.train(n_epochs=n_epochs, lr=0.001)
+# torch.save(trainer.model.state_dict(), save_path+'PBMC.vae.%i.mis%.2f.pkl'%(rep, misprop))
+trainer.model.load_state_dict(torch.load(save_path+'PBMC.vae.%i.mis%.2f.pkl'%(rep, misprop)))
+trainer.model.eval()
 
 full = trainer.create_posterior(trainer.model, gene_dataset, indices=np.arange(len(gene_dataset)))
 latent, batch_indices, _ = full.sequential().get_latent()
@@ -111,8 +116,10 @@ scVI_labels = transfer_nn_labels(latent, mislabels, batch_indices)
 print("Training scANVI")
 scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_labels, n_latent=10)
 scanvi.load_state_dict(trainer.model.state_dict(), strict=False)
-trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset,
-                                                n_epochs_classifier=5, lr_classification=5 * 1e-3, kl=1)
+trainer_scanvi = SemiSupervisedTrainer(scanvi, gene_dataset, classification_ratio=50,
+                                        n_epochs_classifier=1, lr_classification=5 * 1e-3)
+# trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset,
+#                                                 n_epochs_classifier=5, lr_classification=5 * 1e-3, kl=1)
 labelled = np.where(gene_dataset.batch_indices == 0)[0]
 np.random.shuffle(labelled)
 unlabelled = np.where(gene_dataset.batch_indices == 1)[0]
@@ -124,11 +131,10 @@ trainer_scanvi.train(n_epochs=5)
 
 scanvi_labels = trainer_scanvi.full_dataset.sequential().compute_predictions()[1]
 
-torch.save(trainer_scanvi.model.state_dict(), save_path+'scanvi.pkl')
-
 # predicted_labels = pd.DataFrame([scVI_labels,scanvi_labels],index=['scVI','scANVI'])
-predicted_labels = pd.DataFrame([gene_dataset.labels.ravel(),scVI_labels,scanvi_labels],index=['labels','scVI','scANVI'])
-predicted_labels.T.to_csv(save_path+'PBMC.pred_labels.%i.mis%.2f.csv' % (rep, misprop))
+
+predicted_labels = pd.DataFrame([labels,scVI_labels,scanvi_labels],index=['labels','scVI','scANVI'])
+predicted_labels.T.to_csv(save_path+'PBMC_CD.pred_labels.%i.mis%.2f.csv' % (rep, misprop))
 
 # get latent space
 full_scanvi = trainer.create_posterior(trainer_scanvi.model, gene_dataset, indices=np.arange(len(gene_dataset)))
@@ -151,17 +157,9 @@ print((len(CD4_TCELL_VS_BCELL_NAIVE), len(CD8_TCELL_VS_BCELL_NAIVE),
 print(gene_dataset.cell_types)
 
 comparisons = [
-    ['CD4 T cells', 'B cells'],
-    ['CD8 T cells', 'B cells'],
-    ['CD8 T cells', 'CD4 T cells'],
-    ['CD8 T cells', 'NK cells']
-               ]
+    ['Dendritic Cells', 'B cells'],
+    ['CD4 T cells', 'CD8 T cells']]
 
-
-gene_sets = [CD4_TCELL_VS_BCELL_NAIVE,
-             CD8_TCELL_VS_BCELL_NAIVE,
-             CD8_VS_CD4_NAIVE_TCELL,
-             NAIVE_CD8_TCELL_VS_NKCELL]
 
 
 # prepare for differential expression
@@ -175,13 +173,13 @@ results_DE_true_B = {}
 results_DE_true_AB = {}
 results_DE_scANVI = {}
 
-for i,set in enumerate(gene_sets):
+for j, compare in enumerate(comparisons):
     couple_celltypes = (
-        list(gene_dataset.cell_types).index(comparisons[i][0]),
-        list(gene_dataset.cell_types).index(comparisons[i][1]))
+        list(gene_dataset.cell_types).index(compare[0]),
+        list(gene_dataset.cell_types).index(compare[1]))
     print("\nDifferential Expression A/B for cell types\nA: %s\nB: %s\n" %
           tuple((cell_types[couple_celltypes[i]] for i in [0, 1])))
-    key = '.'.join(comparisons[i]).replace(' ','')
+    key = '.'.join(compare).replace(' ','')
     # parameters
     n_cells = 30
     n_samples = 100
@@ -210,9 +208,13 @@ for i,set in enumerate(gene_sets):
     bayes_AB2 = get_bayes_factor_scvi(set_a, set_b, n_samples, n_cells, use_is=use_IS, force_batch=1)
     # Merge BFs
     bayes_AB = 0.5 * bayes_AB1 + 0.5 * bayes_AB2
-    n_cells = 0
-    n_samples = 3000
-    use_agg_post = False
+    # n_cells = 0
+    # n_samples = 3000
+    # use_agg_post = False
+    #
+    n_cells = 30
+    n_samples = 100
+    use_agg_post = True
     def scanvi_generate_scale(trainer_info, labels_info, agg_post, cell_type, batch, ncells, nsamples):
         if agg_post:
             # DE from aggregate posterior
@@ -250,4 +252,4 @@ for i,set in enumerate(gene_sets):
     # Merge BFs
     bayes_scanviAB = 0.5 * bayes_scanviAB1 + 0.5 * bayes_scanviAB2
     res = pd.DataFrame([bayes_A,bayes_B,bayes_AB,bayes_scanviAB], index=['bayes_A','bayes_B','bayes_AB','bayes_scanviAB'])
-    res.T.to_csv(save_path + "PBMC.%s.%i.mis%.2f.csv"%(key, rep, misprop))
+    res.T.to_csv(save_path + "PBMC_CD.%s.%i.mis%.2f.csv"%(key, rep, misprop))

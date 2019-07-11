@@ -91,12 +91,12 @@ BE_curve(gene_dataset, dataset1, dataset2,plotname,recompute=False)
 
 for plotname in ['PBMC8KCITE','MarrowTM','Pancreas','DentateGyrus']:
     fname = '../%s/%s.BE.txt' % (plotname, plotname)
-    # methods = ['vae', 'scanvi1', 'scanvi2','vae_nb', 'scanvi1_nb', 'scanvi2_nb', 'readSeurat', 'MNN', 'Combat', 'PCA']
-    # model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB', 'CCA', 'MNN', 'Combat', 'PCA']
-    # colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'm', 'c')
-    methods = ['vae', 'scanvi1', 'scanvi2','vae_nb', 'scanvi1_nb', 'scanvi2_nb']
-    model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB']
-    colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.')
+    methods = ['vae', 'scanvi1', 'scanvi2','vae_nb', 'scanvi1_nb', 'scanvi2_nb', 'readSeurat', 'MNN', 'Combat', 'PCA']
+    model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB', 'CCA', 'MNN', 'Combat', 'PCA']
+    colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'm', 'c')
+    # methods = ['vae', 'scanvi1', 'scanvi2','vae_nb', 'scanvi1_nb', 'scanvi2_nb']
+    # model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB']
+    # colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.')
     import pandas as pd
     stats = pd.read_table(fname, delim_whitespace=True,header=None)
     stats=np.asarray(stats)
@@ -115,4 +115,5 @@ for plotname in ['PBMC8KCITE','MarrowTM','Pancreas','DentateGyrus']:
     for i, x in enumerate(methods):
         plt.plot(KNeighbors, res[i, :], colors[i], label=x)
     # plt.legend(loc='lower right', shadow=False)
-    plt.savefig("../%s/%s.scvi_only.BE.pdf" % (plotname, plotname))
+    # plt.savefig("../%s/%s.scvi_only.BE.pdf" % (plotname, plotname))
+    plt.savefig("../%s/%s.BE.pdf" % (plotname, plotname))

@@ -28,13 +28,13 @@ model_types = np.unique(model_types)
 res = np.asarray(res)
 
 sorted_res=[]
-# methods = ['vae', 'scanvi1', 'scanvi2', 'vae_nb', 'scanvi1_nb', 'scanvi2_nb']
-# model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB']
-# colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'y--', 'b:', 'y:', 'y-.')
+methods = ['vae', 'scanvi1', 'scanvi2', 'vae_nb', 'scanvi1_nb', 'scanvi2_nb']
+model_names = ['scVI', 'SCANVI1', 'SCANVI2', 'scVI_NB', 'SCANVI1_NB', 'SCANVI2_NB']
+colors = ('r', 'g', 'g--', 'r:', 'g:', 'g-.', 'b', 'y', 'y--', 'b:', 'y:', 'y-.')
 
-methods = ['vae', 'scanvi1', 'scanvi2','readSeurat', 'MNN', 'Combat', 'PCA']
-model_names = ['scVI', 'SCANVI1', 'SCANVI2',  'CCA', 'MNN', 'Combat', 'PCA']
-colors = ('r', 'g', 'g--', 'b', 'y', 'm', 'c')
+# methods = ['vae', 'scanvi1', 'scanvi2','readSeurat', 'MNN', 'Combat', 'PCA']
+# model_names = ['scVI', 'SCANVI1', 'SCANVI2',  'CCA', 'MNN', 'Combat', 'PCA']
+# colors = ('r', 'g', 'g--', 'b', 'y', 'm', 'c')
 
 
 for x in methods:
@@ -58,8 +58,8 @@ for i,x in enumerate(model_names):
     plt.plot(KNeighbors, filtered_res[:,i],colors[i],label=x)
 
 legend = plt.legend(loc='lower right', shadow=False)
-# plt.savefig("../%s/%s_compare4_KNN.pdf" % (dataname,dataname))
-plt.savefig("../%s/%s.KNN.pdf" % (dataname,dataname))
+plt.savefig("../%s/%s_compare4_KNN.pdf" % (dataname,dataname))
+# plt.savefig("../%s/%s.KNN.pdf" % (dataname,dataname))
 #
 # plt.figure(figsize=(5, 5))
 # colors = ('r','g','b','y','m','c')

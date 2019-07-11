@@ -1,6 +1,6 @@
 from scvi.dataset import GeneExpressionDataset
 from scvi.models import VAE
-from scvi.inference import UnsupervisedTrainer, AlternateSemiSupervisedTrainer
+from scvi.inference import UnsupervisedTrainer, SemiSupervisedTrainer
 from scvi.inference.posterior import get_IS_bayes_factors
 from sklearn.metrics import roc_auc_score
 from scipy.stats import spearmanr
@@ -8,6 +8,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from scipy.stats import kendalltau
 from scvi.models.scanvi import SCANVI
 from copy import deepcopy
+import torch
 
 import numpy as np
 import pandas as pd
@@ -121,10 +122,14 @@ trainer = UnsupervisedTrainer(vae,
                               gene_dataset,
                               train_size=0.75,
                               use_cuda=True,
-                              frequency=5, kl=1)
+                              frequency=5)
 
 n_epochs = 100
 trainer.train(n_epochs=n_epochs, lr=0.001)
+# torch.save(trainer.model.state_dict(), save_path+'DE.vae.%i.mis%.2f.pkl'%(rep, misprop))
+trainer.model.load_state_dict(torch.load(save_path+'DE.vae.%i.mis%.2f.pkl'%(rep, misprop)))
+trainer.model.eval()
+
 full = trainer.create_posterior(trainer.model, gene_dataset, indices=np.arange(len(gene_dataset)))
 latent, batch_indices, _ = full.sequential().get_latent()
 
@@ -135,8 +140,10 @@ scVI_labels = transfer_nn_labels(latent, mislabels, batch_indices)
 print("Training scANVI")
 scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_labels, n_latent=10)
 scanvi.load_state_dict(trainer.model.state_dict(), strict=False)
-trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset,
-                                                n_epochs_classifier=5, lr_classification=5 * 1e-3, kl=1)
+trainer_scanvi = SemiSupervisedTrainer(scanvi, gene_dataset, classification_ratio=50,
+                                        n_epochs_classifier=1, lr_classification=5 * 1e-3)
+# trainer_scanvi = AlternateSemiSupervisedTrainer(scanvi, gene_dataset,
+#                                                 n_epochs_classifier=5, lr_classification=5 * 1e-3, kl=1)
 labelled = np.where(gene_dataset.batch_indices == 0)[0]
 np.random.shuffle(labelled)
 unlabelled = np.where(gene_dataset.batch_indices == 1)[0]
@@ -150,7 +157,7 @@ scanvi_labels = trainer_scanvi.full_dataset.sequential().compute_predictions()[1
 
 # predicted_labels = pd.DataFrame([scVI_labels,scanvi_labels],index=['scVI','scANVI'])
 predicted_labels = pd.DataFrame([gene_dataset.labels.ravel(),scVI_labels, scanvi_labels],index=['labels','scVI','scANVI'])
-predicted_labels.T.to_csv(save_path+'pred_labels.%i.mis%.2f.csv' % (rep, misprop))
+predicted_labels.T.to_csv(save_path+'SIM.pred_labels.%i.mis%.2f.csv' % (rep, misprop))
 
 # get latent space
 full_scanvi = trainer.create_posterior(trainer_scanvi.model, gene_dataset, indices=np.arange(len(gene_dataset)))
@@ -220,9 +227,9 @@ for key in theoretical_FC.columns:
     # Merge BFs
     bayes_AB = 0.5 * bayes_AB1 + 0.5 * bayes_AB2
 
-    n_cells = 0
-    n_samples = 3000
-    use_agg_post = False
+    n_cells = 30
+    n_samples = 100
+    use_agg_post = True
 
 
     def scanvi_generate_scale(trainer_info, labels_info, agg_post, cell_type, batch, ncells, nsamples):
@@ -265,4 +272,4 @@ for key in theoretical_FC.columns:
     # Merge BFs
     bayes_scanviAB = 0.5 * bayes_scanviAB1 + 0.5 * bayes_scanviAB2
     res = pd.DataFrame([bayes_A,bayes_B,bayes_AB,bayes_scanviAB], index=['bayes_A','bayes_B','bayes_AB','bayes_scanviAB'])
-    res.T.to_csv(save_path + "result.%s.%i.mis%.2f.csv"%(key, rep, misprop))
+    res.T.to_csv(save_path + "SIM.result.%s.%i.mis%.2f.csv"%(key, rep, misprop))
