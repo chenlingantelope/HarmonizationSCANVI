@@ -1,4 +1,4 @@
-pip==18.0
+pip==21.1
 flake8==3.5.0
 coverage==4.5.1
 Sphinx==1.7.1
