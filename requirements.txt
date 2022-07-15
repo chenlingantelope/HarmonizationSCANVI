@@ -10,7 +10,7 @@ matplotlib==2.2.2
 scikit-learn==0.19.1
 scipy==1.0.0
 h5py==2.8.0
-codecov==2.0.8
+codecov==2.0.16
 pandas==0.23.0
 loompy==2.0.9
 tqdm==4.23.4
